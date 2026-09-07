@@ -162,21 +162,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('users.php');
     } elseif ($action === 'activate_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        set_user_status($pdo, $userId, 'Active');
-        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'users', $userId, 'Partner Agency account activated');
-        flash_set('success', 'Partner Agency account activated.');
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt->execute([':id' => $userId]);
+        if (!$stmt->fetchColumn()) {
+            flash_set('error', 'Partner Agency account not found.');
+        } else {
+            set_user_status($pdo, $userId, 'Active');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'users', $userId, 'Partner Agency account activated');
+            flash_set('success', 'Partner Agency account activated.');
+        }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'disable_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        set_user_status($pdo, $userId, 'Disabled');
-        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_DISABLE', 'users', $userId, 'Partner Agency account disabled');
-        flash_set('success', 'Partner Agency account disabled.');
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt->execute([':id' => $userId]);
+        if (!$stmt->fetchColumn()) {
+            flash_set('error', 'Partner Agency account not found.');
+        } else {
+            set_user_status($pdo, $userId, 'Disabled');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_DISABLE', 'users', $userId, 'Partner Agency account disabled');
+            flash_set('success', 'Partner Agency account disabled.');
+        }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'reenable_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        set_user_status($pdo, $userId, 'Active');
-        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_REENABLE', 'users', $userId, 'Partner Agency account re-enabled');
-        flash_set('success', 'Partner Agency account re-enabled.');
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt->execute([':id' => $userId]);
+        if (!$stmt->fetchColumn()) {
+            flash_set('error', 'Partner Agency account not found.');
+        } else {
+            set_user_status($pdo, $userId, 'Active');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_REENABLE', 'users', $userId, 'Partner Agency account re-enabled');
+            flash_set('success', 'Partner Agency account re-enabled.');
+        }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'delete_agency_account') {
         $userId = (int)($_POST['user_id'] ?? 0);
