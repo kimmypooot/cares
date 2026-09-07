@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS care_jf_job_vacancies (
   status               ENUM('Active','Disabled','Filled','Closed') NOT NULL DEFAULT 'Active',
   created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_vacancy_agency FOREIGN KEY (agency_id) REFERENCES care_jf_partner_agencies(id) ON DELETE CASCADE,
+  CONSTRAINT fk_vacancy_agency FOREIGN KEY (agency_id) REFERENCES care_jf_partner_agencies(id) ON DELETE RESTRICT,
   INDEX idx_vacancy_agency (agency_id),
   INDEX idx_vacancy_status (status)
 ) ENGINE=InnoDB;

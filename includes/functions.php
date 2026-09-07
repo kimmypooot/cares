@@ -90,12 +90,30 @@ function generate_applicant_code(PDO $pdo): string
 function generate_employer_id(PDO $pdo): string
 {
     $year = date('Y');
-    $pdo->prepare(
-        "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('employer_id', :y, 1)
-         ON DUPLICATE KEY UPDATE last_value = LAST_INSERT_ID(last_value + 1)"
-    )->execute([':y' => $year]);
-    $next = (int)$pdo->lastInsertId();
-    return 'EMP-' . $year . '-' . str_pad((string)$next, 7, '0', STR_PAD_LEFT);
+    $ownTransaction = !$pdo->inTransaction();
+    if ($ownTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $pdo->prepare(
+            "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('employer_id', :y, 1)
+             ON DUPLICATE KEY UPDATE last_value = last_value + 1"
+        )->execute([':y' => $year]);
+
+        $stmt = $pdo->prepare("SELECT last_value FROM care_jf_id_sequences WHERE sequence_name = 'employer_id' AND year_key = :y");
+        $stmt->execute([':y' => $year]);
+        $next = (int)$stmt->fetchColumn();
+
+        if ($ownTransaction) {
+            $pdo->commit();
+        }
+        return 'EMP-' . $year . '-' . str_pad((string)$next, 7, '0', STR_PAD_LEFT);
+    } catch (Throwable $e) {
+        if ($ownTransaction) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 /** Format a date consistently, e.g. "January 15, 2026" */
