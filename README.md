@@ -18,6 +18,7 @@ management, and role-based user administration.
 ```bash
 mysql -u root -p < database/database.sql
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
+mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
 ```
 
 **Upgrading an existing v1 installation** (preserves all data — do NOT run
@@ -25,6 +26,7 @@ mysql -u root -p applicant_system < database/migrations/add_partner_agency_accou
 ```bash
 mysql -u root -p applicant_system < database/migrations/update_application_management.sql
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
+mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
 ```
 
 Default administrator account: `admin` / `Admin@123` — **change this

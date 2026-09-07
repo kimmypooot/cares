@@ -150,7 +150,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </select>
     <select name="classification" class="rounded-lg border border-slate-300 text-sm py-2 px-3">
       <option value="All" <?= $classFilter==='All'?'selected':'' ?>>All Classifications</option>
-      <?php foreach (['Job Order','Temporary','COS','Permanent','Casual','Other'] as $opt): ?>
+      <?php foreach (['Job Order','Temporary','COS','Permanent','Casual','Other','Hired'] as $opt): ?>
         <option <?= $classFilter===$opt?'selected':'' ?>><?= e($opt) ?></option>
       <?php endforeach; ?>
     </select>
@@ -203,7 +203,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
             </td>
             <td class="px-4 py-3" data-label="Agency"><?= e($r['agency_display_name']) ?></td>
             <td class="px-4 py-3" data-label="Date Hired"><?= format_date($r['date_hired']) ?></td>
-            <td class="px-4 py-3" data-label="Classification"><?= e($r['employment_status']) ?></td>
+            <td class="px-4 py-3 uppercase" data-label="Classification"><?= e($r['employment_status']) ?></td>
             <td class="px-4 py-3" data-label="Current">
               <?php if ($r['is_current']): ?><span class="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">CURRENT</span><?php endif; ?>
             </td>

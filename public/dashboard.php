@@ -202,7 +202,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 </div>
 
 <script>
-const palette = ['#3b63f5','#22c55e','#eab308','#a855f7','#ef4444','#0ea5e9'];
+const palette = ['#3b63f5','#22c55e','#eab308','#a855f7','#ef4444','#0ea5e9','#f97316','#10b981'];
 
 // Applicant Status: Hired vs Not Hired — pulled live from the database, not hard-coded.
 new Chart(document.getElementById('chartApplicantStatus'), {
