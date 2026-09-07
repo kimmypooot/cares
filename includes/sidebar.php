@@ -4,13 +4,24 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 $employmentPages = ['employment-list.php', 'employment-form.php'];
 $agencyPages = ['partner-agency.php', 'partner-agency-form.php'];
 
-$navItems = [
-    ['href' => 'dashboard.php',       'icon' => 'fa-gauge-high',   'label' => 'Dashboard',       'match' => ['dashboard.php']],
-    ['href' => 'applicants.php',      'icon' => 'fa-users',        'label' => 'Applicants',      'match' => ['applicants.php', 'applicant-create.php', 'applicant-edit.php', 'applicant-view.php']],
-    ['href' => 'employment-list.php', 'icon' => 'fa-briefcase',    'label' => 'Employment',      'match' => $employmentPages],
-    ['href' => 'partner-agency.php',  'icon' => 'fa-building',     'label' => 'Partner Agency',  'match' => $agencyPages],
-    ['href' => 'reports.php',         'icon' => 'fa-chart-column', 'label' => 'Reports',         'match' => ['reports.php']],
-];
+if (is_partner_agency()) {
+    // Partner Agency: no Employment module, no cross-agency Partner Agency
+    // management page — their own profile lives at my-agency.php instead.
+    $navItems = [
+        ['href' => 'dashboard.php',  'icon' => 'fa-gauge-high',    'label' => 'Dashboard',         'match' => ['dashboard.php']],
+        ['href' => 'applicants.php', 'icon' => 'fa-users',         'label' => 'Applicants',        'match' => ['applicants.php', 'applicant-view.php']],
+        ['href' => 'my-agency.php',  'icon' => 'fa-building',      'label' => 'My Partner Agency', 'match' => ['my-agency.php']],
+        ['href' => 'reports.php',    'icon' => 'fa-chart-column',  'label' => 'Reports',           'match' => ['reports.php']],
+    ];
+} else {
+    $navItems = [
+        ['href' => 'dashboard.php',       'icon' => 'fa-gauge-high',   'label' => 'Dashboard',       'match' => ['dashboard.php']],
+        ['href' => 'applicants.php',      'icon' => 'fa-users',        'label' => 'Applicants',      'match' => ['applicants.php', 'applicant-create.php', 'applicant-edit.php', 'applicant-view.php']],
+        ['href' => 'employment-list.php', 'icon' => 'fa-briefcase',    'label' => 'Employment',      'match' => $employmentPages],
+        ['href' => 'partner-agency.php',  'icon' => 'fa-building',     'label' => 'Partner Agency',  'match' => $agencyPages],
+        ['href' => 'reports.php',         'icon' => 'fa-chart-column', 'label' => 'Reports',         'match' => ['reports.php']],
+    ];
+}
 if (can_manage_users()) {
     $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'Users', 'match' => ['users.php']];
 }
