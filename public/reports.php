@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/xlsx_writer.php';
 require_login();
 
 $pdo = Database::getConnection();
+$scopedAgencyId = is_partner_agency() ? current_agency_id($pdo) : null;
 
 $reportType = clean($_GET['report_type'] ?? '');
 $dateFrom = clean($_GET['date_from'] ?? '');
@@ -34,6 +35,12 @@ $reportOptions = [
     'agency_services_applicants' => 'Agency Services Applicants',
 ];
 
+// Partner Agency accounts never see the cross-agency "by_agency" report —
+// they're already scoped to one agency, so it would be meaningless.
+if ($scopedAgencyId !== null) {
+    unset($reportOptions['by_agency']);
+}
+
 if ($reportType && isset($reportOptions[$reportType])) {
     $reportLabel = $reportOptions[$reportType];
 
@@ -52,6 +59,12 @@ if ($reportType && isset($reportOptions[$reportType])) {
         WHERE a.is_deleted = 0
     ";
     $params = [];
+    if ($scopedAgencyId !== null) {
+        // Own-agency-only, enforced server-side — never trust a request
+        // parameter for this; it's always current_agency_id().
+        $base .= " AND er.agency_id = :scoped_agency_id";
+        $params[':scoped_agency_id'] = $scopedAgencyId;
+    }
 
     switch ($reportType) {
         case 'male_applicants':   $base .= " AND a.sex = 'MALE'"; break;
