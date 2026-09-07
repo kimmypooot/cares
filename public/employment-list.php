@@ -4,6 +4,13 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 // Server-side enforcement: Viewer may look at this page (read-only), but has
 // no write actions available anywhere below. Manage actions are gated per-button.
+// Partner Agency accounts don't get this module at all (not just hidden from
+// their sidebar) — they see read-only employment history via an applicant's
+// own profile page instead.
+if (is_partner_agency()) {
+    http_response_code(403);
+    die('<h2 style="font-family:sans-serif">403 — Partner Agency accounts do not have access to the Employment module.</h2>');
+}
 
 $pdo = Database::getConnection();
 
