@@ -12,7 +12,7 @@ class Database
 
     // ---- Update these for your environment (or use environment variables) ----
     private const DB_HOST = 'localhost';
-    private const DB_NAME = 'applicant_system';
+    private const DB_NAME = 'care_job_fair_db';
     private const DB_USER = 'root';
     private const DB_PASS = '';
     private const DB_CHARSET = 'utf8mb4';

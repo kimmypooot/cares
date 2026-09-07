@@ -19,6 +19,7 @@ management, and role-based user administration.
 mysql -u root -p < database/database.sql
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
+mysql -u root -p < database/migrations/rename_database_and_tables.sql
 ```
 
 **Upgrading an existing v1 installation** (preserves all data — do NOT run
@@ -27,6 +28,7 @@ mysql -u root -p applicant_system < database/migrations/add_hired_status_and_upp
 mysql -u root -p applicant_system < database/migrations/update_application_management.sql
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
+mysql -u root -p < database/migrations/rename_database_and_tables.sql
 ```
 
 Default administrator account: `admin` / `Admin@123` — **change this
@@ -37,7 +39,7 @@ immediately** via Settings after first login.
 Edit `config/database.php`:
 ```php
 private const DB_HOST = 'localhost';
-private const DB_NAME = 'applicant_system';
+private const DB_NAME = 'care_job_fair_db';
 private const DB_USER = 'root';
 private const DB_PASS = '';
 ```
