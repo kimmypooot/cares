@@ -36,9 +36,16 @@ $reportOptions = [
 ];
 
 // Partner Agency accounts never see the cross-agency "by_agency" report —
-// they're already scoped to one agency, so it would be meaningless.
+// they're already scoped to one agency, so it would be meaningless. They
+// also never see "not_yet_hired": that report's own filter (er.id IS NULL)
+// and the agency scope filter (er.agency_id = :scoped_agency_id) both read
+// er.* from the same LEFT JOIN row, so when er.id IS NULL every er.* column
+// including er.agency_id is NULL too — NULL = :scoped_agency_id can never
+// be TRUE, making the combination permanently unsatisfiable (always "0
+// record(s)" regardless of real data).
 if ($scopedAgencyId !== null) {
     unset($reportOptions['by_agency']);
+    unset($reportOptions['not_yet_hired']);
 }
 
 if ($reportType && isset($reportOptions[$reportType])) {
@@ -152,6 +159,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </optgroup>
         <optgroup label="Employment Reports">
           <?php foreach (['hired','not_yet_hired','job_order','cos','temporary','casual','permanent','by_agency','hired_in_range'] as $key): ?>
+            <?php if (!isset($reportOptions[$key])) continue; ?>
             <option value="<?= $key ?>" <?= $reportType===$key?'selected':'' ?>><?= e($reportOptions[$key]) ?></option>
           <?php endforeach; ?>
         </optgroup>
