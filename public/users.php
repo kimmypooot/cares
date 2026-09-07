@@ -162,14 +162,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('users.php');
     } elseif ($action === 'activate_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt = $pdo->prepare("SELECT agency_id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
         $stmt->execute([':id' => $userId]);
-        if (!$stmt->fetchColumn()) {
+        $agencyId = $stmt->fetchColumn();
+        if (!$agencyId) {
             flash_set('error', 'Partner Agency account not found.');
         } else {
-            set_user_status($pdo, $userId, 'Active');
-            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'care_jf_users', $userId, 'Partner Agency account activated');
-            flash_set('success', 'Partner Agency account activated.');
+            $pdo->beginTransaction();
+            try {
+                set_user_status($pdo, $userId, 'Active');
+
+                // Employer ID is assigned exactly once, ever — never
+                // regenerated on a later re-activation.
+                $empStmt = $pdo->prepare("SELECT employer_id FROM care_jf_partner_agencies WHERE id = :id");
+                $empStmt->execute([':id' => $agencyId]);
+                if (!$empStmt->fetchColumn()) {
+                    $employerId = generate_employer_id($pdo);
+                    $pdo->prepare("UPDATE care_jf_partner_agencies SET employer_id = :eid WHERE id = :id")
+                        ->execute([':eid' => $employerId, ':id' => $agencyId]);
+                    audit_log($pdo, $currentUserId, 'EMPLOYER_ID_GENERATED', 'care_jf_partner_agencies', $agencyId, "Employer ID {$employerId} generated");
+                }
+
+                audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'care_jf_users', $userId, 'Partner Agency account activated');
+                $pdo->commit();
+                flash_set('success', 'Partner Agency account activated.');
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                flash_set('error', 'Activation failed due to a system error. Please try again.');
+            }
         }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'disable_agency') {
@@ -232,7 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $users = $pdo->query("SELECT * FROM care_jf_users WHERE role <> 'Partner Agency' ORDER BY created_at DESC")->fetchAll();
 $agencyAccounts = $pdo->query(
     "SELECT u.id, u.username, u.status AS account_status, u.created_at,
-            pa.agency_name, pa.contact_person, pa.contact_no, pa.email, pa.status AS agency_status
+            pa.agency_name, pa.contact_person, pa.contact_no, pa.email, pa.status AS agency_status, pa.employer_id
      FROM care_jf_users u
      JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
      WHERE u.role = 'Partner Agency'
@@ -274,6 +294,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
         <tr>
           <th class="px-4 py-2.5 text-left">Agency Name</th>
+          <th class="px-4 py-2.5 text-left">Employer ID</th>
           <th class="px-4 py-2.5 text-left">Contact Person</th>
           <th class="px-4 py-2.5 text-left">Contact No</th>
           <th class="px-4 py-2.5 text-left">Email</th>
@@ -285,13 +306,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </thead>
       <tbody class="divide-y divide-slate-100">
         <?php if (!$agencyAccounts): ?>
-          <tr><td colspan="8" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
+          <tr><td colspan="9" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
         <?php endif; ?>
         <?php foreach ($agencyAccounts as $a):
           $statusColors = ['Pending' => 'bg-amber-100 text-amber-800', 'Active' => 'bg-green-100 text-green-700', 'Disabled' => 'bg-gray-100 text-gray-600'];
         ?>
         <tr>
           <td class="px-4 py-2.5 font-medium" data-label="Agency"><?= e($a['agency_name']) ?></td>
+          <td class="px-4 py-2.5 font-mono text-xs" data-label="Employer ID"><?= e($a['employer_id'] ?: '—') ?></td>
           <td class="px-4 py-2.5" data-label="Contact Person"><?= e($a['contact_person'] ?: '—') ?></td>
           <td class="px-4 py-2.5" data-label="Contact No"><?= e($a['contact_no'] ?: '—') ?></td>
           <td class="px-4 py-2.5" data-label="Email"><?= e($a['email'] ?: '—') ?></td>

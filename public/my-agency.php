@@ -71,6 +71,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
   <form method="POST" onsubmit="return validateForm(this) && confirm('Save changes to your agency profile?');">
     <?= csrf_field() ?>
     <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
+      <?php if (!empty($agency['employer_id'])): ?>
+      <div class="mb-4 pb-4 border-b border-slate-100">
+        <p class="text-xs text-slate-500 uppercase tracking-wide">Employer ID</p>
+        <p class="text-lg font-bold text-brand-700"><?= e($agency['employer_id']) ?></p>
+      </div>
+      <?php endif; ?>
       <div class="grid sm:grid-cols-2 gap-3 text-sm border-b border-slate-100 pb-4 mb-2">
         <div><dt class="text-slate-500 inline">Account Username:</dt> <dd class="font-medium text-slate-800 inline"><?= e($accountRow['username']) ?></dd></div>
         <div><dt class="text-slate-500 inline">Account Status:</dt> <dd class="font-medium text-slate-800 inline"><?= e($accountRow['status']) ?></dd></div>

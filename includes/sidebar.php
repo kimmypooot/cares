@@ -11,6 +11,7 @@ if (is_partner_agency()) {
         ['href' => 'dashboard.php',  'icon' => 'fa-gauge-high',    'label' => 'Dashboard',         'match' => ['dashboard.php']],
         ['href' => 'applicants.php', 'icon' => 'fa-users',         'label' => 'Applicants',        'match' => ['applicants.php', 'applicant-view.php']],
         ['href' => 'my-agency.php',  'icon' => 'fa-building',      'label' => 'My Partner Agency', 'match' => ['my-agency.php']],
+        ['href' => 'vacancies.php',  'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies', 'match' => ['vacancies.php']],
         ['href' => 'reports.php',    'icon' => 'fa-chart-column',  'label' => 'Reports',           'match' => ['reports.php']],
     ];
 } else {
@@ -19,6 +20,7 @@ if (is_partner_agency()) {
         ['href' => 'applicants.php',      'icon' => 'fa-users',        'label' => 'Applicants',      'match' => ['applicants.php', 'applicant-create.php', 'applicant-edit.php', 'applicant-view.php']],
         ['href' => 'employment-list.php', 'icon' => 'fa-briefcase',    'label' => 'Employment',      'match' => $employmentPages],
         ['href' => 'partner-agency.php',  'icon' => 'fa-building',     'label' => 'Partner Agency',  'match' => $agencyPages],
+        ['href' => 'vacancies.php',       'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies', 'match' => ['vacancies.php']],
         ['href' => 'reports.php',         'icon' => 'fa-chart-column', 'label' => 'Reports',         'match' => ['reports.php']],
     ];
 }
