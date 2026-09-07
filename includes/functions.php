@@ -183,6 +183,14 @@ function active_agencies(PDO $pdo, ?int $includeId = null): array
     return $stmt->fetchAll();
 }
 
+/** Is this agency name already used by a different partner agency? Pass $excludeId when editing an existing one. */
+function agency_name_taken(PDO $pdo, string $agencyName, ?int $excludeId = null): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM partner_agencies WHERE agency_name = :n AND id <> :id");
+    $stmt->execute([':n' => $agencyName, ':id' => $excludeId ?? 0]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
 /** Paginate: returns [limit, offset, page] from $_GET, sanitized. */
 function paginate_params(): array
 {

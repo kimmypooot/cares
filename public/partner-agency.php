@@ -120,7 +120,9 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <thead class="bg-slate-50 text-slate-600 text-xs uppercase print:bg-transparent">
           <tr>
             <th class="px-4 py-2.5 text-left">Agency / Office Name</th>
-            <th class="px-4 py-2.5 text-left">Address</th>
+            <th class="px-4 py-2.5 text-left">Contact Person</th>
+            <th class="px-4 py-2.5 text-left">Contact No</th>
+            <th class="px-4 py-2.5 text-left">Email</th>
             <th class="px-4 py-2.5 text-left">Employment Records</th>
             <th class="px-4 py-2.5 text-left">Status</th>
             <th class="px-4 py-2.5 text-right print:hidden">Actions</th>
@@ -128,12 +130,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </thead>
         <tbody class="divide-y divide-slate-100">
           <?php if (!$agencies): ?>
-            <tr><td colspan="5" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No partner agencies found.</td></tr>
+            <tr><td colspan="7" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No partner agencies found.</td></tr>
           <?php endif; ?>
           <?php foreach ($agencies as $ag): ?>
           <tr class="hover:bg-slate-50">
-            <td class="px-4 py-3 font-medium" data-label="Agency"><?= e($ag['agency_name']) ?></td>
-            <td class="px-4 py-3 text-slate-500" data-label="Address"><?= e($ag['address']) ?></td>
+            <td class="px-4 py-3 font-medium" data-label="Agency"><?= e($ag['agency_name']) ?><p class="text-xs text-slate-400 font-normal"><?= e($ag['address']) ?></p></td>
+            <td class="px-4 py-3 text-slate-500" data-label="Contact Person"><?= e($ag['contact_person'] ?: '—') ?></td>
+            <td class="px-4 py-3 text-slate-500" data-label="Contact No"><?= e($ag['contact_no'] ?: '—') ?></td>
+            <td class="px-4 py-3 text-slate-500" data-label="Email"><?= e($ag['email'] ?: '—') ?></td>
             <td class="px-4 py-3" data-label="Records"><?= (int)$ag['record_count'] ?></td>
             <td class="px-4 py-3" data-label="Status">
               <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $ag['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($ag['status']) ?></span>
