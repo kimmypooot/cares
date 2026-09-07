@@ -17,12 +17,14 @@ management, and role-based user administration.
 **New installation:**
 ```bash
 mysql -u root -p < database/database.sql
+mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 ```
 
 **Upgrading an existing v1 installation** (preserves all data — do NOT run
 `database.sql` over an existing database):
 ```bash
 mysql -u root -p applicant_system < database/migrations/update_application_management.sql
+mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 ```
 
 Default administrator account: `admin` / `Admin@123` — **change this
