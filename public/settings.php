@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new = (string)($_POST['new_password'] ?? '');
     $confirm = (string)($_POST['confirm_password'] ?? '');
 
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT * FROM care_jf_users WHERE id = :id");
     $stmt->execute([':id' => current_user()['id']]);
     $user = $stmt->fetch();
 
@@ -27,9 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $pdo->prepare("UPDATE users SET password = :p WHERE id = :id")
+        $pdo->prepare("UPDATE care_jf_users SET password = :p WHERE id = :id")
             ->execute([':p' => password_hash($new, PASSWORD_DEFAULT), ':id' => $user['id']]);
-        audit_log($pdo, (int)$user['id'], 'UPDATE', 'users', (int)$user['id'], 'Changed own password');
+        audit_log($pdo, (int)$user['id'], 'UPDATE', 'care_jf_users', (int)$user['id'], 'Changed own password');
         flash_set('success', 'Password updated successfully.');
         redirect('settings.php');
     }

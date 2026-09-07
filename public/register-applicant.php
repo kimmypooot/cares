@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Email is no longer an independent duplicate trigger.
     if (!$errors) {
         $dupStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM applicants
+            "SELECT COUNT(*) FROM care_jf_applicants
              WHERE is_deleted = 0
                AND last_name = :ln AND first_name = :fn
                AND created_at >= (NOW() - INTERVAL 1 MONTH)"
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $code = generate_applicant_code($pdo);
             $stmt = $pdo->prepare(
-                "INSERT INTO applicants
+                "INSERT INTO care_jf_applicants
                     (applicant_code, last_name, first_name, middle_name, extension_name, sex, date_of_birth,
                      place_of_birth, contact_number, email_address, address, civil_status, source,
                      service_job_seeker, service_agency_services)
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // gets an employment record added later via the internal
             // Employment module or Edit Applicant.
 
-            audit_log($pdo, null, 'CREATE', 'applicants', $newId, "Public self-registration: applicant $code");
+            audit_log($pdo, null, 'CREATE', 'care_jf_applicants', $newId, "Public self-registration: applicant $code");
             $pdo->commit();
 
             // Post/Redirect/Get: send the browser back to this same form with

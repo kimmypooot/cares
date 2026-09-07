@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ---- Duplicate check: same name + date of birth ----
     if (!$errors) {
         $dupStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM applicants
+            "SELECT COUNT(*) FROM care_jf_applicants
              WHERE is_deleted = 0 AND last_name = :ln AND first_name = :fn AND date_of_birth = :dob"
         );
         $dupStmt->execute([
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         $code = generate_applicant_code($pdo);
         $stmt = $pdo->prepare(
-            "INSERT INTO applicants
+            "INSERT INTO care_jf_applicants
                 (applicant_code, last_name, first_name, middle_name, extension_name, sex, date_of_birth, contact_number, address, civil_status)
              VALUES
                 (:code, :ln, :fn, :mn, :ext, :sex, :dob, :contact, :address, :civil)"
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $newId = (int)$pdo->lastInsertId();
 
-        audit_log($pdo, (int)current_user()['id'], 'CREATE', 'applicants', $newId, "Registered applicant $code");
+        audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_applicants', $newId, "Registered applicant $code");
         flash_set('success', "Applicant $code successfully registered.");
         redirect('applicant-view.php?id=' . $newId);
     }

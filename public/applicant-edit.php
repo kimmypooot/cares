@@ -6,7 +6,7 @@ require_role(['Administrator', 'Employee']);
 $pdo = Database::getConnection();
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 
-$stmt = $pdo->prepare("SELECT * FROM applicants WHERE id = :id AND is_deleted = 0");
+$stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE id = :id AND is_deleted = 0");
 $stmt->execute([':id' => $id]);
 $applicant = $stmt->fetch();
 
@@ -16,7 +16,7 @@ if (!$applicant) {
 }
 
 // Current employment record (if any), used to prefill the Employment section
-$curStmt = $pdo->prepare("SELECT * FROM employment_records WHERE applicant_id = :id AND is_current = 1 ORDER BY date_hired DESC LIMIT 1");
+$curStmt = $pdo->prepare("SELECT * FROM care_jf_employment_records WHERE applicant_id = :id AND is_current = 1 ORDER BY date_hired DESC LIMIT 1");
 $curStmt->execute([':id' => $id]);
 $currentEmployment = $curStmt->fetch();
 
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         $dupStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM applicants
+            "SELECT COUNT(*) FROM care_jf_applicants
              WHERE is_deleted = 0 AND id <> :id AND last_name = :ln AND first_name = :fn AND date_of_birth = :dob"
         );
         $dupStmt->execute([':id' => $id, ':ln' => $old['last_name'], ':fn' => $old['first_name'], ':dob' => $old['date_of_birth']]);
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
-                "UPDATE applicants SET last_name=:ln, first_name=:fn, middle_name=:mn, extension_name=:ext,
+                "UPDATE care_jf_applicants SET last_name=:ln, first_name=:fn, middle_name=:mn, extension_name=:ext,
                  sex=:sex, date_of_birth=:dob, place_of_birth=:pob, contact_number=:contact, email_address=:email,
                  address=:address, civil_status=:civil, remarks=:remarks,
                  service_job_seeker=:svc_js, service_agency_services=:svc_as
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $agencyName = $agencyId ? null : $old['agency_free_text'];
                 $agencyAddress = null;
                 if ($agencyId) {
-                    $aStmt = $pdo->prepare("SELECT agency_name, address FROM partner_agencies WHERE id = :id");
+                    $aStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
                     $aStmt->execute([':id' => $agencyId]);
                     $aRow = $aStmt->fetch();
                     if ($aRow) { $agencyName = $aRow['agency_name']; $agencyAddress = $aRow['address']; }
@@ -146,36 +146,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$agencyAddress) $agencyAddress = 'Not specified';
 
                 // Clear any other current flag first (app-level, not a trigger — see database.sql notes)
-                $pdo->prepare("UPDATE employment_records SET is_current = 0 WHERE applicant_id = :aid")->execute([':aid' => $id]);
+                $pdo->prepare("UPDATE care_jf_employment_records SET is_current = 0 WHERE applicant_id = :aid")->execute([':aid' => $id]);
 
                 if ($currentEmployment) {
                     $pdo->prepare(
-                        "UPDATE employment_records SET agency_id=:agid, agency_company_name=:agency, agency_company_address=:addr,
+                        "UPDATE care_jf_employment_records SET agency_id=:agid, agency_company_name=:agency, agency_company_address=:addr,
                          date_hired=:date, employment_status=:cls, is_current=1, status='Active' WHERE id=:rid"
                     )->execute([
                         ':agid' => $agencyId, ':agency' => $agencyName, ':addr' => $agencyAddress,
                         ':date' => $old['date_hired'], ':cls' => $old['employment_classification'], ':rid' => $currentEmployment['id'],
                     ]);
-                    audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'employment_records', (int)$currentEmployment['id'], "Employment synced via Edit Applicant for {$applicant['applicant_code']}");
+                    audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_employment_records', (int)$currentEmployment['id'], "Employment synced via Edit Applicant for {$applicant['applicant_code']}");
                 } else {
                     $newEmpStmt = $pdo->prepare(
-                        "INSERT INTO employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
+                        "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
                          VALUES (:aid, :agid, :agency, :addr, :date, :cls, 1, 'Active')"
                     );
                     $newEmpStmt->execute([
                         ':aid' => $id, ':agid' => $agencyId, ':agency' => $agencyName, ':addr' => $agencyAddress,
                         ':date' => $old['date_hired'], ':cls' => $old['employment_classification'],
                     ]);
-                    audit_log($pdo, (int)current_user()['id'], 'CREATE', 'employment_records', (int)$pdo->lastInsertId(), "Employment created via Edit Applicant for {$applicant['applicant_code']}");
+                    audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_employment_records', (int)$pdo->lastInsertId(), "Employment created via Edit Applicant for {$applicant['applicant_code']}");
                 }
             } elseif ($currentEmployment) {
                 // Switched to "Not Yet": un-mark current, but keep the row as history (non-destructive).
-                $pdo->prepare("UPDATE employment_records SET is_current = 0 WHERE id = :rid")
+                $pdo->prepare("UPDATE care_jf_employment_records SET is_current = 0 WHERE id = :rid")
                     ->execute([':rid' => $currentEmployment['id']]);
-                audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'employment_records', (int)$currentEmployment['id'], "Marked no longer current via Edit Applicant for {$applicant['applicant_code']}");
+                audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_employment_records', (int)$currentEmployment['id'], "Marked no longer current via Edit Applicant for {$applicant['applicant_code']}");
             }
 
-            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'applicants', $id, "Updated applicant {$applicant['applicant_code']}");
+            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_applicants', $id, "Updated applicant {$applicant['applicant_code']}");
             $pdo->commit();
             flash_set('success', 'Applicant information updated successfully.');
             redirect('applicant-view.php?id=' . $id);

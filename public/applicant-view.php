@@ -6,7 +6,7 @@ require_login();
 $pdo = Database::getConnection();
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 
-$stmt = $pdo->prepare("SELECT * FROM applicants WHERE id = :id AND is_deleted = 0");
+$stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE id = :id AND is_deleted = 0");
 $stmt->execute([':id' => $id]);
 $applicant = $stmt->fetch();
 
@@ -21,25 +21,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'delete') {
         require_role(['Administrator']);
-        $pdo->prepare("UPDATE applicants SET is_deleted = 1 WHERE id = :id")->execute([':id' => $id]);
-        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'applicants', $id, "Deleted applicant {$applicant['applicant_code']}");
+        $pdo->prepare("UPDATE care_jf_applicants SET is_deleted = 1 WHERE id = :id")->execute([':id' => $id]);
+        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_applicants', $id, "Deleted applicant {$applicant['applicant_code']}");
         flash_set('success', 'Applicant record deleted.');
         redirect('applicants.php');
     } elseif (in_array($action, ['enable_employment', 'disable_employment'], true)) {
         require_role(['Administrator', 'Employee']);
         $recordId = (int)($_POST['record_id'] ?? 0);
         $newStatus = $action === 'enable_employment' ? 'Active' : 'Disabled';
-        $pdo->prepare("UPDATE employment_records SET status = :s WHERE id = :id AND applicant_id = :aid")
+        $pdo->prepare("UPDATE care_jf_employment_records SET status = :s WHERE id = :id AND applicant_id = :aid")
             ->execute([':s' => $newStatus, ':id' => $recordId, ':aid' => $id]);
-        audit_log($pdo, (int)current_user()['id'], strtoupper(str_replace('_employment', '', $action)), 'employment_records', $recordId, "Employment record {$newStatus}");
+        audit_log($pdo, (int)current_user()['id'], strtoupper(str_replace('_employment', '', $action)), 'care_jf_employment_records', $recordId, "Employment record {$newStatus}");
         flash_set('success', "Employment record {$newStatus}.");
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'delete_employment') {
         require_role(['Administrator']);
         $recordId = (int)($_POST['record_id'] ?? 0);
-        $pdo->prepare("DELETE FROM employment_records WHERE id = :id AND applicant_id = :aid")
+        $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid")
             ->execute([':id' => $recordId, ':aid' => $id]);
-        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'employment_records', $recordId, 'Employment record deleted');
+        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
         flash_set('success', 'Employment record deleted.');
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'mark_hired') {
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('applicant-view.php?id=' . $id);
         }
 
-        $agStmt = $pdo->prepare("SELECT agency_name, address FROM partner_agencies WHERE id = :id");
+        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
         $agStmt->execute([':id' => $hireAgencyId]);
         $hireAgencyRow = $agStmt->fetch();
         if (!$hireAgencyRow) {
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Guard against a double-hire: only proceed if the applicant genuinely
         // still has no current active employment record right now.
         $hireCheckStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
+            "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
         );
         $hireCheckStmt->execute([':id' => $id]);
         if ((int)$hireCheckStmt->fetchColumn() > 0) {
@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $hireStmt = $pdo->prepare(
-            "INSERT INTO employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
+            "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
              VALUES (:aid, :agid, :agency, :address, CURDATE(), 'Hired', 1, 'Active')"
         );
         $hireStmt->execute([
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':agency' => $hireAgencyRow['agency_name'], ':address' => $hireAgencyRow['address'],
         ]);
         $newHireId = (int)$pdo->lastInsertId();
-        audit_log($pdo, (int)current_user()['id'], 'MARK_HIRED', 'employment_records', $newHireId,
+        audit_log($pdo, (int)current_user()['id'], 'MARK_HIRED', 'care_jf_employment_records', $newHireId,
             "Applicant {$applicant['applicant_code']} marked Hired by {$hireAgencyRow['agency_name']}");
         flash_set('success', 'Applicant marked as Hired.');
         redirect('applicant-view.php?id=' . $id);
@@ -100,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $empStmt = $pdo->prepare(
     "SELECT er.*, COALESCE(pa.agency_name, er.agency_company_name) AS agency_display_name,
             pa.contact_person AS agency_contact_person, pa.contact_no AS agency_contact_no, pa.email AS agency_email
-     FROM employment_records er
-     LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
+     FROM care_jf_employment_records er
+     LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
      WHERE er.applicant_id = :id ORDER BY er.date_hired DESC, er.id DESC"
 );
 $empStmt->execute([':id' => $id]);
@@ -112,7 +112,7 @@ $status = current_employment_status($pdo, $id);
 $hireAgencies = can_manage_employment() ? active_agencies($pdo) : [];
 $myAgencyName = '';
 if (is_partner_agency()) {
-    $myAgencyStmt = $pdo->prepare("SELECT agency_name FROM partner_agencies WHERE id = :id");
+    $myAgencyStmt = $pdo->prepare("SELECT agency_name FROM care_jf_partner_agencies WHERE id = :id");
     $myAgencyStmt->execute([':id' => current_agency_id($pdo)]);
     $myAgencyName = (string)$myAgencyStmt->fetchColumn();
 }

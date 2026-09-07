@@ -78,8 +78,8 @@ $sql = "
         a.sex, a.date_of_birth, a.contact_number, a.address, a.civil_status, a.created_at,
         a.service_job_seeker, a.service_agency_services,
         er.employment_status AS current_status
-    FROM applicants a
-    LEFT JOIN employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
+    FROM care_jf_applicants a
+    LEFT JOIN care_jf_employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
     WHERE $whereSql
     $havingSql
     ORDER BY a.$sortCol $sortDir

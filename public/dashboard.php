@@ -8,23 +8,23 @@ $pdo = Database::getConnection();
 if (is_partner_agency()) {
     $agencyId = current_agency_id($pdo);
 
-    $agencyStmt = $pdo->prepare("SELECT * FROM partner_agencies WHERE id = :id");
+    $agencyStmt = $pdo->prepare("SELECT * FROM care_jf_partner_agencies WHERE id = :id");
     $agencyStmt->execute([':id' => $agencyId]);
     $agency = $agencyStmt->fetch();
 
     // Shared applicant pool stats (every Partner Agency sees the same
     // system-wide numbers here — the pool itself is shared, per the
     // "Partner Agency can view registered applicants" rule).
-    $totalApplicantsPool = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0")->fetchColumn();
+    $totalApplicantsPool = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_applicants WHERE is_deleted = 0")->fetchColumn();
     $notHiredPool = (int)$pdo->query(
-        "SELECT COUNT(*) FROM applicants a
-         LEFT JOIN employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
+        "SELECT COUNT(*) FROM care_jf_applicants a
+         LEFT JOIN care_jf_employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
          WHERE a.is_deleted = 0 AND er.id IS NULL"
     )->fetchColumn();
 
     // Own-agency stat: applicants this agency has actually hired.
     $hiredByAgencyStmt = $pdo->prepare(
-        "SELECT COUNT(*) FROM employment_records WHERE agency_id = :aid AND is_current = 1 AND status = 'Active'"
+        "SELECT COUNT(*) FROM care_jf_employment_records WHERE agency_id = :aid AND is_current = 1 AND status = 'Active'"
     );
     $hiredByAgencyStmt->execute([':aid' => $agencyId]);
     $hiredByAgencyCount = (int)$hiredByAgencyStmt->fetchColumn();
@@ -69,13 +69,13 @@ if (is_partner_agency()) {
 }
 
 $pendingAgencyCount = can_manage_users()
-    ? (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Partner Agency' AND status = 'Pending'")->fetchColumn()
+    ? (int)$pdo->query("SELECT COUNT(*) FROM care_jf_users WHERE role = 'Partner Agency' AND status = 'Pending'")->fetchColumn()
     : 0;
 
 // ---- Summary counts ----
-$totalApplicants = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0")->fetchColumn();
-$maleCount   = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0 AND sex='MALE'")->fetchColumn();
-$femaleCount = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0 AND sex='FEMALE'")->fetchColumn();
+$totalApplicants = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_applicants WHERE is_deleted = 0")->fetchColumn();
+$maleCount   = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_applicants WHERE is_deleted = 0 AND sex='MALE'")->fetchColumn();
+$femaleCount = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_applicants WHERE is_deleted = 0 AND sex='FEMALE'")->fetchColumn();
 
 $statusCounts = [
     'For Further Review' => 0,
@@ -92,8 +92,8 @@ $statusCounts = [
 // active (non-disabled) employment record — matches current_employment_status().
 $stmt = $pdo->query(
     "SELECT a.id, er.employment_status
-     FROM applicants a
-     LEFT JOIN employment_records er
+     FROM care_jf_applicants a
+     LEFT JOIN care_jf_employment_records er
        ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
      WHERE a.is_deleted = 0"
 );
@@ -110,7 +110,7 @@ $notHiredCount = $statusCounts['For Further Review'];
 // ---- Registrations per month (last 6 months) ----
 $regByMonth = $pdo->query(
     "SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COUNT(*) AS total
-     FROM applicants WHERE is_deleted = 0
+     FROM care_jf_applicants WHERE is_deleted = 0
      GROUP BY ym ORDER BY ym DESC LIMIT 6"
 )->fetchAll();
 $regByMonth = array_reverse($regByMonth);
@@ -118,7 +118,7 @@ $regByMonth = array_reverse($regByMonth);
 // ---- Hires per month (last 6 months) — active records only ----
 $hireByMonth = $pdo->query(
     "SELECT DATE_FORMAT(date_hired, '%Y-%m') AS ym, COUNT(*) AS total
-     FROM employment_records WHERE status = 'Active'
+     FROM care_jf_employment_records WHERE status = 'Active'
      GROUP BY ym ORDER BY ym DESC LIMIT 6"
 )->fetchAll();
 $hireByMonth = array_reverse($hireByMonth);

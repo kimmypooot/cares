@@ -6,10 +6,10 @@ require_role(['Administrator']);
 $pdo = Database::getConnection();
 [$limit, $offset, $page] = paginate_params();
 
-$total = (int)$pdo->query("SELECT COUNT(*) FROM audit_logs")->fetchColumn();
+$total = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_audit_logs")->fetchColumn();
 $stmt = $pdo->prepare(
-    "SELECT al.*, u.full_name, u.username FROM audit_logs al
-     LEFT JOIN users u ON u.id = al.user_id
+    "SELECT al.*, u.full_name, u.username FROM care_jf_audit_logs al
+     LEFT JOIN care_jf_users u ON u.id = al.user_id
      ORDER BY al.created_at DESC LIMIT :limit OFFSET :offset"
 );
 $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);

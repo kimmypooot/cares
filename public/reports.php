@@ -60,9 +60,9 @@ if ($reportType && isset($reportOptions[$reportType])) {
                a.service_job_seeker, a.service_agency_services,
                COALESCE(pa.agency_name, er.agency_company_name) AS agency_company_name,
                er.date_hired, er.employment_status
-        FROM applicants a
-        LEFT JOIN employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
-        LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
+        FROM care_jf_applicants a
+        LEFT JOIN care_jf_employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
+        LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
         WHERE a.is_deleted = 0
     ";
     $params = [];
