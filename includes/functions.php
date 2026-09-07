@@ -68,7 +68,7 @@ function generate_applicant_code(PDO $pdo): string
     $prefix = 'APP-' . $yearMonth . '-';
 
     $stmt = $pdo->prepare(
-        "SELECT applicant_code FROM applicants
+        "SELECT applicant_code FROM care_jf_applicants
          WHERE applicant_code LIKE :prefix
          ORDER BY applicant_code DESC LIMIT 1"
     );
@@ -105,7 +105,7 @@ function is_valid_ph_number(string $number): bool
 function audit_log(PDO $pdo, ?int $userId, string $action, string $table, ?int $recordId, string $description): void
 {
     $stmt = $pdo->prepare(
-        "INSERT INTO audit_logs (user_id, action, table_name, record_id, description, ip_address)
+        "INSERT INTO care_jf_audit_logs (user_id, action, table_name, record_id, description, ip_address)
          VALUES (:user_id, :action, :table_name, :record_id, :description, :ip)"
     );
     $stmt->execute([
@@ -126,7 +126,7 @@ function audit_log(PDO $pdo, ?int $userId, string $action, string $table, ?int $
 function current_employment_status(PDO $pdo, int $applicantId): array
 {
     $stmt = $pdo->prepare(
-        "SELECT employment_status FROM employment_records
+        "SELECT employment_status FROM care_jf_employment_records
          WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'
          ORDER BY date_hired DESC LIMIT 1"
     );
@@ -154,7 +154,7 @@ function current_employment_status(PDO $pdo, int $applicantId): array
 function is_applicant_hired(PDO $pdo, int $applicantId): bool
 {
     $stmt = $pdo->prepare(
-        "SELECT COUNT(*) FROM employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
+        "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
     );
     $stmt->execute([':id' => $applicantId]);
     return (int)$stmt->fetchColumn() > 0;
@@ -173,13 +173,13 @@ function active_agencies(PDO $pdo, ?int $includeId = null): array
 {
     if ($includeId) {
         $stmt = $pdo->prepare(
-            "SELECT id, agency_name, status FROM partner_agencies
+            "SELECT id, agency_name, status FROM care_jf_partner_agencies
              WHERE status = 'Active' OR id = :id
              ORDER BY agency_name"
         );
         $stmt->execute([':id' => $includeId]);
     } else {
-        $stmt = $pdo->query("SELECT id, agency_name, status FROM partner_agencies WHERE status = 'Active' ORDER BY agency_name");
+        $stmt = $pdo->query("SELECT id, agency_name, status FROM care_jf_partner_agencies WHERE status = 'Active' ORDER BY agency_name");
     }
     return $stmt->fetchAll();
 }
@@ -187,7 +187,7 @@ function active_agencies(PDO $pdo, ?int $includeId = null): array
 /** Is this agency name already used by a different partner agency? Pass $excludeId when editing an existing one. */
 function agency_name_taken(PDO $pdo, string $agencyName, ?int $excludeId = null): bool
 {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM partner_agencies WHERE agency_name = :n AND id <> :id");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_partner_agencies WHERE agency_name = :n AND id <> :id");
     $stmt->execute([':n' => $agencyName, ':id' => $excludeId ?? 0]);
     return (int)$stmt->fetchColumn() > 0;
 }

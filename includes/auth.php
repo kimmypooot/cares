@@ -140,7 +140,7 @@ function current_agency_id(PDO $pdo): ?int
     if (!$userId) {
         return null;
     }
-    $stmt = $pdo->prepare("SELECT agency_id FROM users WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT agency_id FROM care_jf_users WHERE id = :id");
     $stmt->execute([':id' => $userId]);
     $agencyId = $stmt->fetchColumn();
     return $agencyId !== null && $agencyId !== false ? (int)$agencyId : null;
@@ -163,20 +163,20 @@ function require_own_agency_record(PDO $pdo, ?int $recordAgencyId): void
 /** Set a user's account status, keeping the legacy is_active column in sync. */
 function set_user_status(PDO $pdo, int $userId, string $status): void
 {
-    $pdo->prepare("UPDATE users SET status = :s, is_active = :a WHERE id = :id")
+    $pdo->prepare("UPDATE care_jf_users SET status = :s, is_active = :a WHERE id = :id")
         ->execute([':s' => $status, ':a' => $status === 'Active' ? 1 : 0, ':id' => $userId]);
 }
 
 /** Safeguard: prevent removing/disabling/demoting the last remaining active Administrator. */
 function is_last_active_admin(PDO $pdo, int $userId): bool
 {
-    $stmt = $pdo->prepare("SELECT role, is_active FROM users WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT role, is_active FROM care_jf_users WHERE id = :id");
     $stmt->execute([':id' => $userId]);
     $target = $stmt->fetch();
     if (!$target || $target['role'] !== 'Administrator' || !$target['is_active']) {
         return false;
     }
-    $count = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Administrator' AND is_active = 1")->fetchColumn();
+    $count = (int)$pdo->query("SELECT COUNT(*) FROM care_jf_users WHERE role = 'Administrator' AND is_active = 1")->fetchColumn();
     return $count <= 1;
 }
 
@@ -195,8 +195,8 @@ function attempt_login(PDO $pdo, string $username, string $password): bool
 
     $stmt = $pdo->prepare(
         "SELECT u.*, pa.status AS agency_status
-         FROM users u
-         LEFT JOIN partner_agencies pa ON pa.id = u.agency_id
+         FROM care_jf_users u
+         LEFT JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
          WHERE u.username = :u LIMIT 1"
     );
     $stmt->execute([':u' => $username]);
@@ -219,7 +219,7 @@ function attempt_login(PDO $pdo, string $username, string $password): bool
         $_SESSION['last_activity'] = time();
         $_SESSION['login_attempts'] = 0;
 
-        audit_log($pdo, $user['id'], 'LOGIN', 'users', $user['id'], 'User logged in');
+        audit_log($pdo, $user['id'], 'LOGIN', 'care_jf_users', $user['id'], 'User logged in');
         return true;
     }
 
@@ -236,7 +236,7 @@ function do_logout(PDO $pdo): void
 {
     $user = current_user();
     if ($user['id']) {
-        audit_log($pdo, (int)$user['id'], 'LOGOUT', 'users', (int)$user['id'], 'User logged out');
+        audit_log($pdo, (int)$user['id'], 'LOGOUT', 'care_jf_users', (int)$user['id'], 'User logged out');
     }
     $_SESSION = [];
     session_destroy();
