@@ -31,10 +31,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $countStmt->execute([':id' => $id]);
         $userCountStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_users WHERE agency_id = :id");
         $userCountStmt->execute([':id' => $id]);
+        $vacancyCountStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_job_vacancies WHERE agency_id = :id");
+        $vacancyCountStmt->execute([':id' => $id]);
         if ((int)$countStmt->fetchColumn() > 0) {
             flash_set('error', 'This agency has employment history linked to it and cannot be deleted. Disable it instead to preserve historical records.');
         } elseif ((int)$userCountStmt->fetchColumn() > 0) {
             flash_set('error', 'This agency still has a Partner Agency account linked to it and cannot be deleted. Delete or reassign that account first, or disable the agency instead.');
+        } elseif ((int)$vacancyCountStmt->fetchColumn() > 0) {
+            flash_set('error', 'This agency has job vacancies linked to it and cannot be deleted. Disable it instead.');
         } else {
             $pdo->prepare("DELETE FROM care_jf_partner_agencies WHERE id = :id")->execute([':id' => $id]);
             audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_partner_agencies', $id, 'Partner Agency deleted');

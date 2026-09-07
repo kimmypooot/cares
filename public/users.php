@@ -188,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set('success', 'Partner Agency account activated.');
             } catch (Throwable $e) {
                 $pdo->rollBack();
+                error_log('Partner Agency activation failed: ' . $e->getMessage());
                 flash_set('error', 'Activation failed due to a system error. Please try again.');
             }
         }

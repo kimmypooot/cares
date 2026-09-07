@@ -111,7 +111,8 @@ ini_set('session.cookie_secure', '1');
 │       ├── update_application_management.sql                    Non-destructive v1→v2 upgrade
 │       ├── add_partner_agency_accounts.sql                       Adds partner agency accounts
 │       ├── add_hired_status_and_uppercase_backfill.sql           Adds hired status + uppercase backfill
-│       └── rename_database_and_tables.sql                        Renames DB to care_job_fair_db, prefixes tables with care_jf_
+│       ├── rename_database_and_tables.sql                        Renames DB to care_job_fair_db, prefixes tables with care_jf_
+│       └── add_job_vacancies_and_employer_id.sql                 Adds Job Vacancies module + atomic Employer ID generation
 ├── includes/            auth.php, csrf.php, functions.php, header.php, footer.php, sidebar.php
 ├── public/               Web-accessible root
 │   ├── login.php                  Landing hub: Login / Register Applicant / Sign Up
@@ -123,6 +124,7 @@ ini_set('session.cookie_secure', '1');
 │   ├── employment-list.php        Employment module home (search/filter all records)
 │   ├── employment-form.php        Add/edit a single employment record
 │   ├── partner-agency.php / partner-agency-form.php
+│   ├── vacancies.php               Job Vacancies module (agency-scoped CRUD)
 │   ├── reports.php, users.php, audit-logs.php, settings.php
 │   ├── api/applicants.php         JSON endpoint for live search/pagination
 │   └── assets/                    Built CSS + vendored Font Awesome/Alpine/Chart.js

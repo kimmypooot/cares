@@ -20,9 +20,13 @@ if (is_partner_agency()) {
         ['href' => 'applicants.php',      'icon' => 'fa-users',        'label' => 'Applicants',      'match' => ['applicants.php', 'applicant-create.php', 'applicant-edit.php', 'applicant-view.php']],
         ['href' => 'employment-list.php', 'icon' => 'fa-briefcase',    'label' => 'Employment',      'match' => $employmentPages],
         ['href' => 'partner-agency.php',  'icon' => 'fa-building',     'label' => 'Partner Agency',  'match' => $agencyPages],
-        ['href' => 'vacancies.php',       'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies', 'match' => ['vacancies.php']],
         ['href' => 'reports.php',         'icon' => 'fa-chart-column', 'label' => 'Reports',         'match' => ['reports.php']],
     ];
+    if (can_manage_employment()) {
+        array_splice($navItems, 4, 0, [[
+            'href' => 'vacancies.php', 'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies', 'match' => ['vacancies.php'],
+        ]]);
+    }
 }
 if (can_manage_users()) {
     $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'Users', 'match' => ['users.php']];

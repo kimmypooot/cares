@@ -13,10 +13,33 @@ $jobLevels = ['Level 1', 'Level 2', 'Level 3', 'Job Order - Level 1', 'Job Order
 $statusOptions = ['Active', 'Disabled', 'Filled', 'Closed'];
 $scopedAgencyId = is_partner_agency() ? current_agency_id($pdo) : null;
 
+if (is_partner_agency() && !$scopedAgencyId) {
+    flash_set('error', 'Your agency record could not be found. Please contact the Administrator.');
+    redirect('dashboard.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
+
+    // Additive defense: re-check the same roles the top-of-file gate
+    // already enforces. Should never trigger given that gate, but every
+    // POST/state-change handler in this codebase re-checks independently.
+    if (!can_manage_employment() && !is_partner_agency()) {
+        http_response_code(403);
+        die('<h2 style="font-family:sans-serif">403 — You do not have permission to access this page.</h2>');
+    }
+
     $action = $_POST['action'] ?? '';
     $id = (int)($_POST['id'] ?? 0);
+
+    // Actions that target an existing row must have a valid id — otherwise
+    // edit reads an undefined $ownerAgencyId and enable/disable/delete
+    // would run a no-op WHERE id = 0 while still writing an audit_log entry
+    // and flashing success.
+    if (in_array($action, ['edit', 'enable', 'disable', 'delete'], true) && $id <= 0) {
+        flash_set('error', 'Invalid vacancy.');
+        redirect('vacancies.php');
+    }
 
     // Resolve ownership for any action targeting an existing row. Partner
     // Agency's own agency is always server-derived — never a posted value.
@@ -45,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jobLevel = clean($_POST['job_level'] ?? '');
         $salaryGrade = clean($_POST['salary_grade'] ?? '');
         $occupationalOption = clean($_POST['occupational_option'] ?? '');
-        $vacantCount = max(1, (int)($_POST['vacant_count'] ?? 1));
+        $vacantCountRaw = trim((string)($_POST['vacant_count'] ?? ''));
         $status = clean($_POST['status'] ?? 'Active');
 
         $errors = [];
@@ -53,6 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($position === '') $errors[] = 'Position is required.';
         if (!in_array($jobLevel, $jobLevels, true)) $errors[] = 'Select a valid Job Level.';
         if (!in_array($status, $statusOptions, true)) $errors[] = 'Select a valid status.';
+        if ($vacantCountRaw === '' || !ctype_digit($vacantCountRaw)) {
+            $errors[] = 'No. of Vacant Positions must be a non-negative whole number.';
+            $vacantCount = 0;
+        } else {
+            $vacantCount = (int)$vacantCountRaw;
+        }
 
         if ($errors) {
             flash_set('error', implode(' ', $errors));
@@ -85,9 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         audit_log($pdo, (int)current_user()['id'], $action === 'enable' ? 'VACANCY_ENABLE' : 'VACANCY_DISABLE', 'care_jf_job_vacancies', $id, "Vacancy {$newStatus}");
         flash_set('success', "Vacancy {$newStatus}.");
     } elseif ($action === 'delete') {
-        if (!can_manage_employment()) {
+        if (!can_delete()) {
             http_response_code(403);
-            die('<h2 style="font-family:sans-serif">403 — Only an Administrator or Employee can delete a job vacancy.</h2>');
+            die('<h2 style="font-family:sans-serif">403 — Only an Administrator can delete a job vacancy.</h2>');
         }
         // No dependent records can exist yet in Phase 1 (employment_records
         // has no vacancy_id column until Phase 3) — once Phase 3 adds that
@@ -236,7 +265,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </thead>
         <tbody class="divide-y divide-slate-100">
           <?php if (!$vacancies): ?>
-            <tr><td colspan="6" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-briefcase text-2xl mb-2 block"></i> No job vacancies found.</td></tr>
+            <tr><td colspan="<?= $scopedAgencyId === null ? 6 : 5 ?>" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-briefcase text-2xl mb-2 block"></i> No job vacancies found.</td></tr>
           <?php endif; ?>
           <?php foreach ($vacancies as $v): ?>
           <tr>
@@ -257,7 +286,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                   <i class="fa-solid <?= $v['status']==='Active' ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
                 </button>
               </form>
-              <?php if (can_manage_employment()): ?>
+              <?php if (can_delete()): ?>
               <form method="POST" class="inline">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= (int)$v['id'] ?>">
@@ -300,7 +329,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1">No. of Vacant Positions</label>
-                  <input type="number" name="vacant_count" min="1" value="<?= (int)$v['vacant_count'] ?>" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+                  <input type="number" name="vacant_count" min="0" value="<?= (int)$v['vacant_count'] ?>" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1">Status</label>

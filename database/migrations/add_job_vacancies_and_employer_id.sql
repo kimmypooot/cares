@@ -23,11 +23,14 @@ ALTER TABLE care_jf_partner_agencies
   ADD COLUMN IF NOT EXISTS employer_id VARCHAR(20) NULL UNIQUE AFTER id;
 
 -- ---------------------------------------------------------------------
--- 2. Reusable atomic-counter table. Uses MySQL's documented
---    INSERT ... ON DUPLICATE KEY UPDATE last_value = LAST_INSERT_ID(last_value + 1)
---    idiom — the UPDATE clause row-locks atomically as part of ONE
+-- 2. Reusable atomic-counter table. generate_employer_id() (functions.php)
+--    wraps an INSERT ... ON DUPLICATE KEY UPDATE last_value = last_value + 1
+--    in an explicit transaction, followed by a SELECT to read the value
+--    back — relying on InnoDB's "read your own writes" within the same
+--    transaction. The UPDATE clause row-locks atomically as part of ONE
 --    statement, so two simultaneous callers can never read-then-write
---    the same next value (the exact race COUNT(*) + 1 has).
+--    the same next value (the exact race COUNT(*) + 1 has). No
+--    LAST_INSERT_ID() trick and no PDO::lastInsertId() call are used.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS care_jf_id_sequences (
   sequence_name VARCHAR(50) NOT NULL,
@@ -76,7 +79,7 @@ JOIN (
 SET pa.employer_id = CONCAT('EMP-', YEAR(CURDATE()), '-', LPAD(ranked.rn, 7, '0'));
 
 INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value)
-SELECT 'employer_id', YEAR(CURDATE()), COUNT(*)
+SELECT 'employer_id', YEAR(CURDATE()), COALESCE(MAX(CAST(SUBSTRING_INDEX(employer_id, '-', -1) AS UNSIGNED)), 0)
 FROM care_jf_partner_agencies
 WHERE employer_id IS NOT NULL AND employer_id LIKE CONCAT('EMP-', YEAR(CURDATE()), '-%')
 ON DUPLICATE KEY UPDATE last_value = GREATEST(last_value, VALUES(last_value));
