@@ -31,7 +31,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (in_array($action, ['add', 'edit'], true)) {
-        $agencyId = is_partner_agency() ? $scopedAgencyId : (int)($_POST['agency_id'] ?? 0);
+        if ($action === 'edit') {
+            // A vacancy's owning agency is never changed by an edit — reuse
+            // the value already resolved (and ownership-checked) above,
+            // regardless of role. This also means the edit form doesn't
+            // need an agency_id field at all.
+            $agencyId = $ownerAgencyId;
+        } else {
+            $agencyId = is_partner_agency() ? $scopedAgencyId : (int)($_POST['agency_id'] ?? 0);
+        }
         $title = clean($_POST['title'] ?? '') ?: 'Job Available';
         $position = clean($_POST['position'] ?? '');
         $jobLevel = clean($_POST['job_level'] ?? '');
