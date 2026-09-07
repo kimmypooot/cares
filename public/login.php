@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'login')
     } else {
         $stmt = $pdo->prepare(
             "SELECT u.status, u.role, pa.status AS agency_status
-             FROM users u LEFT JOIN partner_agencies pa ON pa.id = u.agency_id
+             FROM care_jf_users u LEFT JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
              WHERE u.username = :u LIMIT 1"
         );
         $stmt->execute([':u' => $username]);
@@ -78,14 +78,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
         $regErrors['agency_name'] = 'A Partner Agency with this name is already registered.';
     }
     if (!$regErrors) {
-        $dup = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = :u");
+        $dup = $pdo->prepare("SELECT COUNT(*) FROM care_jf_users WHERE username = :u");
         $dup->execute([':u' => $regOld['username']]);
         if ((int)$dup->fetchColumn() > 0) {
             $regErrors['username'] = 'That username is already taken.';
         }
     }
     if (!$regErrors) {
-        $dupEmail = $pdo->prepare("SELECT COUNT(*) FROM partner_agencies WHERE email = :e");
+        $dupEmail = $pdo->prepare("SELECT COUNT(*) FROM care_jf_partner_agencies WHERE email = :e");
         $dupEmail->execute([':e' => $regOld['email']]);
         if ((int)$dupEmail->fetchColumn() > 0) {
             $regErrors['email'] = 'That email address is already registered to a Partner Agency.';
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare(
-                "INSERT INTO partner_agencies (agency_name, address, contact_person, contact_no, email, status)
+                "INSERT INTO care_jf_partner_agencies (agency_name, address, contact_person, contact_no, email, status)
                  VALUES (:n, :a, :cp, :cn, :e, 'Active')"
             );
             $stmt->execute([
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
             $agencyId = (int)$pdo->lastInsertId();
 
             $stmt = $pdo->prepare(
-                "INSERT INTO users (username, password, full_name, role, status, is_active, agency_id)
+                "INSERT INTO care_jf_users (username, password, full_name, role, status, is_active, agency_id)
                  VALUES (:u, :p, :f, 'Partner Agency', 'Pending', 0, :aid)"
             );
             $stmt->execute([
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
                 ':aid' => $agencyId,
             ]);
 
-            audit_log($pdo, null, 'PARTNER_AGENCY_REGISTER', 'partner_agencies', $agencyId,
+            audit_log($pdo, null, 'PARTNER_AGENCY_REGISTER', 'care_jf_partner_agencies', $agencyId,
                 "Partner Agency registration: {$regOld['agency_name']} (user: {$regOld['username']}), pending approval");
 
             $pdo->commit();

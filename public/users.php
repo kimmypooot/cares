@@ -20,13 +20,13 @@ $reauthError = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reauth_confirm') {
     csrf_require();
     $password = (string)($_POST['password'] ?? '');
-    $stmt = $pdo->prepare("SELECT password FROM users WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT password FROM care_jf_users WHERE id = :id");
     $stmt->execute([':id' => $currentUserId]);
     $row = $stmt->fetch();
 
     if ($row && password_verify($password, $row['password'])) {
         grant_reauth($reauthScope);
-        audit_log($pdo, $currentUserId, 'REAUTH', 'users', $currentUserId, 'Confirmed password to access User Management');
+        audit_log($pdo, $currentUserId, 'REAUTH', 'care_jf_users', $currentUserId, 'Confirmed password to access User Management');
         redirect('users.php');
     } else {
         $reauthError = 'Incorrect password. Please try again.';
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (strlen($password) < 8) $errors['password'] = 'Password must be at least 8 characters.';
 
         if (!$errors) {
-            $dup = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = :u");
+            $dup = $pdo->prepare("SELECT COUNT(*) FROM care_jf_users WHERE username = :u");
             $dup->execute([':u' => $username]);
             if ((int)$dup->fetchColumn() > 0) {
                 $errors['username'] = 'That username is already taken.';
@@ -93,9 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            $stmt = $pdo->prepare("INSERT INTO users (username, password, full_name, role) VALUES (:u, :p, :f, :r)");
+            $stmt = $pdo->prepare("INSERT INTO care_jf_users (username, password, full_name, role) VALUES (:u, :p, :f, :r)");
             $stmt->execute([':u' => $username, ':p' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role]);
-            audit_log($pdo, $currentUserId, 'CREATE', 'users', (int)$pdo->lastInsertId(), "Created user $username ($role)");
+            audit_log($pdo, $currentUserId, 'CREATE', 'care_jf_users', (int)$pdo->lastInsertId(), "Created user $username ($role)");
             flash_set('success', 'User account created successfully.');
             redirect('users.php');
         }
@@ -113,9 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            $pdo->prepare("UPDATE users SET full_name = :f, role = :r WHERE id = :id")
+            $pdo->prepare("UPDATE care_jf_users SET full_name = :f, role = :r WHERE id = :id")
                 ->execute([':f' => $fullName, ':r' => $role, ':id' => $userId]);
-            audit_log($pdo, $currentUserId, 'UPDATE', 'users', $userId, "Updated user #$userId (role: $role)");
+            audit_log($pdo, $currentUserId, 'UPDATE', 'care_jf_users', $userId, "Updated user #$userId (role: $role)");
             flash_set('success', 'User updated successfully.');
         } else {
             flash_set('error', reset($errors));
@@ -128,11 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (is_last_active_admin($pdo, $userId)) {
             flash_set('error', 'Cannot disable the only active Administrator account.');
         } else {
-            $statusStmt = $pdo->prepare("SELECT status FROM users WHERE id = :id");
+            $statusStmt = $pdo->prepare("SELECT status FROM care_jf_users WHERE id = :id");
             $statusStmt->execute([':id' => $userId]);
             $currentStatus = $statusStmt->fetchColumn();
             set_user_status($pdo, $userId, $currentStatus === 'Active' ? 'Disabled' : 'Active');
-            audit_log($pdo, $currentUserId, 'UPDATE', 'users', $userId, 'Toggled user active status');
+            audit_log($pdo, $currentUserId, 'UPDATE', 'care_jf_users', $userId, 'Toggled user active status');
             flash_set('success', 'User status updated.');
         }
         redirect('users.php');
@@ -143,8 +143,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (is_last_active_admin($pdo, $userId)) {
             flash_set('error', 'Cannot delete the only active Administrator account.');
         } else {
-            $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
-            audit_log($pdo, $currentUserId, 'DELETE', 'users', $userId, 'User deleted');
+            $pdo->prepare("DELETE FROM care_jf_users WHERE id = :id")->execute([':id' => $userId]);
+            audit_log($pdo, $currentUserId, 'DELETE', 'care_jf_users', $userId, 'User deleted');
             flash_set('success', 'User deleted.');
         }
         redirect('users.php');
@@ -154,51 +154,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (strlen($newPassword) < 8) {
             flash_set('error', 'Temporary password must be at least 8 characters.');
         } else {
-            $pdo->prepare("UPDATE users SET password = :p WHERE id = :id")
+            $pdo->prepare("UPDATE care_jf_users SET password = :p WHERE id = :id")
                 ->execute([':p' => password_hash($newPassword, PASSWORD_DEFAULT), ':id' => $userId]);
-            audit_log($pdo, $currentUserId, 'UPDATE', 'users', $userId, 'Password reset by administrator');
+            audit_log($pdo, $currentUserId, 'UPDATE', 'care_jf_users', $userId, 'Password reset by administrator');
             flash_set('success', 'Password reset successfully.');
         }
         redirect('users.php');
     } elseif ($action === 'activate_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt = $pdo->prepare("SELECT id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
         $stmt->execute([':id' => $userId]);
         if (!$stmt->fetchColumn()) {
             flash_set('error', 'Partner Agency account not found.');
         } else {
             set_user_status($pdo, $userId, 'Active');
-            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'users', $userId, 'Partner Agency account activated');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'care_jf_users', $userId, 'Partner Agency account activated');
             flash_set('success', 'Partner Agency account activated.');
         }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'disable_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt = $pdo->prepare("SELECT id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
         $stmt->execute([':id' => $userId]);
         if (!$stmt->fetchColumn()) {
             flash_set('error', 'Partner Agency account not found.');
         } else {
             set_user_status($pdo, $userId, 'Disabled');
-            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_DISABLE', 'users', $userId, 'Partner Agency account disabled');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_DISABLE', 'care_jf_users', $userId, 'Partner Agency account disabled');
             flash_set('success', 'Partner Agency account disabled.');
         }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'reenable_agency') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt = $pdo->prepare("SELECT id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
         $stmt->execute([':id' => $userId]);
         if (!$stmt->fetchColumn()) {
             flash_set('error', 'Partner Agency account not found.');
         } else {
             set_user_status($pdo, $userId, 'Active');
-            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_REENABLE', 'users', $userId, 'Partner Agency account re-enabled');
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_REENABLE', 'care_jf_users', $userId, 'Partner Agency account re-enabled');
             flash_set('success', 'Partner Agency account re-enabled.');
         }
         redirect('users.php?tab=partner-agencies');
     } elseif ($action === 'delete_agency_account') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT agency_id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt = $pdo->prepare("SELECT agency_id FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
         $stmt->execute([':id' => $userId]);
         $agencyId = $stmt->fetchColumn();
         if (!$agencyId) {
@@ -210,9 +210,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // re-register, and there's no admin UI to create a replacement
             // Partner Agency account) or if the agency has employment
             // history — in both cases, Disable instead of Delete.
-            $onlyAccountStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE agency_id = :aid");
+            $onlyAccountStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_users WHERE agency_id = :aid");
             $onlyAccountStmt->execute([':aid' => $agencyId]);
-            $historyStmt = $pdo->prepare("SELECT COUNT(*) FROM employment_records WHERE agency_id = :aid");
+            $historyStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_employment_records WHERE agency_id = :aid");
             $historyStmt->execute([':aid' => $agencyId]);
 
             if ((int)$onlyAccountStmt->fetchColumn() <= 1) {
@@ -220,8 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ((int)$historyStmt->fetchColumn() > 0) {
                 flash_set('error', 'This agency has employment history linked to it — the account cannot be deleted. Disable it instead.');
             } else {
-                $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
-                audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACCOUNT_DELETE', 'users', $userId, 'Partner Agency account deleted');
+                $pdo->prepare("DELETE FROM care_jf_users WHERE id = :id")->execute([':id' => $userId]);
+                audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACCOUNT_DELETE', 'care_jf_users', $userId, 'Partner Agency account deleted');
                 flash_set('success', 'Partner Agency account deleted.');
             }
         }
@@ -229,12 +229,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$users = $pdo->query("SELECT * FROM users WHERE role <> 'Partner Agency' ORDER BY created_at DESC")->fetchAll();
+$users = $pdo->query("SELECT * FROM care_jf_users WHERE role <> 'Partner Agency' ORDER BY created_at DESC")->fetchAll();
 $agencyAccounts = $pdo->query(
     "SELECT u.id, u.username, u.status AS account_status, u.created_at,
             pa.agency_name, pa.contact_person, pa.contact_no, pa.email, pa.status AS agency_status
-     FROM users u
-     JOIN partner_agencies pa ON pa.id = u.agency_id
+     FROM care_jf_users u
+     JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
      WHERE u.role = 'Partner Agency'
      ORDER BY u.created_at DESC"
 )->fetchAll();

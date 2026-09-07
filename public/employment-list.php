@@ -25,15 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (in_array($action, ['enable', 'disable'], true)) {
         require_role(['Administrator', 'Employee']);
         $newStatus = $action === 'enable' ? 'Active' : 'Disabled';
-        $stmt = $pdo->prepare("UPDATE employment_records SET status = :s WHERE id = :id");
+        $stmt = $pdo->prepare("UPDATE care_jf_employment_records SET status = :s WHERE id = :id");
         $stmt->execute([':s' => $newStatus, ':id' => $recordId]);
-        audit_log($pdo, (int)current_user()['id'], strtoupper($action), 'employment_records', $recordId, "Employment record " . strtolower($newStatus));
+        audit_log($pdo, (int)current_user()['id'], strtoupper($action), 'care_jf_employment_records', $recordId, "Employment record " . strtolower($newStatus));
         flash_set('success', "Employment record {$newStatus}.");
     } elseif ($action === 'delete') {
         require_role(['Administrator']);
-        $stmt = $pdo->prepare("DELETE FROM employment_records WHERE id = :id");
+        $stmt = $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id");
         $stmt->execute([':id' => $recordId]);
-        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'employment_records', $recordId, 'Employment record deleted');
+        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
         flash_set('success', 'Employment record deleted.');
     }
     redirect('employment-list.php');
@@ -81,15 +81,15 @@ $whereSql = implode(' AND ', $where);
 // free-text agencies and never shows an agency with zero records.
 $agencyOptions = $pdo->query(
     "SELECT DISTINCT COALESCE(pa.agency_name, er.agency_company_name) AS agency_name
-     FROM employment_records er
-     LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
+     FROM care_jf_employment_records er
+     LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
      ORDER BY agency_name"
 )->fetchAll(PDO::FETCH_COLUMN);
 
 $countStmt = $pdo->prepare(
-    "SELECT COUNT(*) FROM employment_records er
-     JOIN applicants a ON a.id = er.applicant_id
-     LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
+    "SELECT COUNT(*) FROM care_jf_employment_records er
+     JOIN care_jf_applicants a ON a.id = er.applicant_id
+     LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
      WHERE $whereSql"
 );
 $countStmt->execute($params);
@@ -98,9 +98,9 @@ $total = (int)$countStmt->fetchColumn();
 $stmt = $pdo->prepare(
     "SELECT er.*, a.applicant_code, a.last_name, a.first_name, a.middle_name, a.extension_name,
             COALESCE(pa.agency_name, er.agency_company_name) AS agency_display_name
-     FROM employment_records er
-     JOIN applicants a ON a.id = er.applicant_id
-     LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
+     FROM care_jf_employment_records er
+     JOIN care_jf_applicants a ON a.id = er.applicant_id
+     LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
      WHERE $whereSql
      ORDER BY er.date_hired DESC, er.id DESC
      LIMIT :limit OFFSET :offset"

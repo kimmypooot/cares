@@ -7,7 +7,7 @@ $pdo = Database::getConnection();
 $agencyId = current_agency_id($pdo);
 $errors = [];
 
-$stmt = $pdo->prepare("SELECT * FROM partner_agencies WHERE id = :id");
+$stmt = $pdo->prepare("SELECT * FROM care_jf_partner_agencies WHERE id = :id");
 $stmt->execute([':id' => $agencyId]);
 $agency = $stmt->fetch();
 
@@ -16,7 +16,7 @@ if (!$agency) {
     redirect('dashboard.php');
 }
 
-$userStmt = $pdo->prepare("SELECT username, status, created_at FROM users WHERE id = :id");
+$userStmt = $pdo->prepare("SELECT username, status, created_at FROM care_jf_users WHERE id = :id");
 $userStmt->execute([':id' => current_user()['id']]);
 $accountRow = $userStmt->fetch();
 
@@ -47,13 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Agency user cannot target another agency's record no matter
         // what this form posts.
         $pdo->prepare(
-            "UPDATE partner_agencies SET agency_name = :n, address = :a, contact_person = :cp, contact_no = :cn, email = :e
+            "UPDATE care_jf_partner_agencies SET agency_name = :n, address = :a, contact_person = :cp, contact_no = :cn, email = :e
              WHERE id = :id"
         )->execute([
             ':n' => $old['agency_name'], ':a' => $old['address'], ':cp' => $old['contact_person'],
             ':cn' => $old['contact_no'], ':e' => $old['email'] ?: null, ':id' => $agencyId,
         ]);
-        audit_log($pdo, (int)current_user()['id'], 'PARTNER_AGENCY_PROFILE_UPDATE', 'partner_agencies', $agencyId, 'Partner Agency profile updated');
+        audit_log($pdo, (int)current_user()['id'], 'PARTNER_AGENCY_PROFILE_UPDATE', 'care_jf_partner_agencies', $agencyId, 'Partner Agency profile updated');
         flash_set('success', 'Partner Agency profile updated successfully.');
         redirect('my-agency.php');
     }

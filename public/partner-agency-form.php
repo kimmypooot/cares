@@ -10,7 +10,7 @@ $errors = [];
 $old = ['agency_name' => '', 'address' => '', 'contact_person' => '', 'contact_no' => '', 'email' => ''];
 
 if ($isEdit) {
-    $stmt = $pdo->prepare("SELECT * FROM partner_agencies WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT * FROM care_jf_partner_agencies WHERE id = :id");
     $stmt->execute([':id' => $id]);
     $agency = $stmt->fetch();
     if (!$agency) {
@@ -38,15 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         if ($isEdit) {
-            $pdo->prepare("UPDATE partner_agencies SET agency_name = :n, address = :a, contact_person = :cp, contact_no = :cn, email = :e WHERE id = :id")
+            $pdo->prepare("UPDATE care_jf_partner_agencies SET agency_name = :n, address = :a, contact_person = :cp, contact_no = :cn, email = :e WHERE id = :id")
                 ->execute([':n' => $old['agency_name'], ':a' => $old['address'], ':cp' => $old['contact_person'], ':cn' => $old['contact_no'], ':e' => $old['email'] ?: null, ':id' => $id]);
-            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'partner_agencies', $id, "Updated Partner Agency: {$old['agency_name']}");
+            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_partner_agencies', $id, "Updated Partner Agency: {$old['agency_name']}");
             flash_set('success', 'Partner Agency updated successfully.');
         } else {
-            $stmt = $pdo->prepare("INSERT INTO partner_agencies (agency_name, address, contact_person, contact_no, email) VALUES (:n, :a, :cp, :cn, :e)");
+            $stmt = $pdo->prepare("INSERT INTO care_jf_partner_agencies (agency_name, address, contact_person, contact_no, email) VALUES (:n, :a, :cp, :cn, :e)");
             $stmt->execute([':n' => $old['agency_name'], ':a' => $old['address'], ':cp' => $old['contact_person'], ':cn' => $old['contact_no'], ':e' => $old['email'] ?: null]);
             $newId = (int)$pdo->lastInsertId();
-            audit_log($pdo, (int)current_user()['id'], 'CREATE', 'partner_agencies', $newId, "Created Partner Agency: {$old['agency_name']}");
+            audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_partner_agencies', $newId, "Created Partner Agency: {$old['agency_name']}");
             flash_set('success', 'Partner Agency added successfully.');
         }
         redirect('partner-agency.php');

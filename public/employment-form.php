@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $agencyName = '';
     $agencyAddress = '';
     if ($agencyId) {
-        $aStmt = $pdo->prepare("SELECT agency_name, address FROM partner_agencies WHERE id = :id");
+        $aStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
         $aStmt->execute([':id' => $agencyId]);
         $agencyRow = $aStmt->fetch();
         if ($agencyRow) {
@@ -53,13 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // current flag first, in application code (see database.sql notes
         // on why this is no longer a trigger).
         if ($isCurrent) {
-            $pdo->prepare("UPDATE employment_records SET is_current = 0 WHERE applicant_id = :aid")
+            $pdo->prepare("UPDATE care_jf_employment_records SET is_current = 0 WHERE applicant_id = :aid")
                 ->execute([':aid' => $applicantId]);
         }
 
         if ($action === 'add') {
             $stmt = $pdo->prepare(
-                "INSERT INTO employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status, remarks)
+                "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status, remarks)
                  VALUES (:aid, :agid, :agency, :address, :date, :status, :current, 'Active', :remarks)"
             );
             $stmt->execute([
@@ -67,19 +67,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':date' => $dateHired, ':status' => $status, ':current' => $isCurrent, ':remarks' => $remarks ?: null,
             ]);
             $newId = (int)$pdo->lastInsertId();
-            audit_log($pdo, (int)current_user()['id'], 'CREATE', 'employment_records', $newId, "Added employment record for applicant #$applicantId");
+            audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_employment_records', $newId, "Added employment record for applicant #$applicantId");
             flash_set('success', 'Employment record added successfully.');
         } elseif ($action === 'edit') {
             $recordId = (int)($_POST['record_id'] ?? 0);
             $stmt = $pdo->prepare(
-                "UPDATE employment_records SET agency_id=:agid, agency_company_name=:agency, agency_company_address=:address,
+                "UPDATE care_jf_employment_records SET agency_id=:agid, agency_company_name=:agency, agency_company_address=:address,
                  date_hired=:date, employment_status=:status, is_current=:current, remarks=:remarks WHERE id=:id"
             );
             $stmt->execute([
                 ':agid' => $agencyId, ':agency' => $agencyName, ':address' => $agencyAddress,
                 ':date' => $dateHired, ':status' => $status, ':current' => $isCurrent, ':remarks' => $remarks ?: null, ':id' => $recordId,
             ]);
-            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'employment_records', $recordId, "Updated employment record for applicant #$applicantId");
+            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_employment_records', $recordId, "Updated employment record for applicant #$applicantId");
             flash_set('success', 'Employment record updated successfully.');
         }
         redirect('applicant-view.php?id=' . $applicantId);
@@ -93,7 +93,7 @@ $applicantId = (int)($_GET['applicant_id'] ?? ($_POST['applicant_id'] ?? 0));
 $action = $_GET['action'] ?? ($_POST['action'] ?? 'add');
 $record = ['agency_id' => null, 'agency_company_name' => '', 'agency_company_address' => '', 'date_hired' => '', 'employment_status' => '', 'is_current' => 1, 'remarks' => ''];
 
-$stmt = $pdo->prepare("SELECT * FROM applicants WHERE id = :id AND is_deleted = 0");
+$stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE id = :id AND is_deleted = 0");
 $stmt->execute([':id' => $applicantId]);
 $applicant = $stmt->fetch();
 if (!$applicant) {
@@ -103,7 +103,7 @@ if (!$applicant) {
 
 if ($action === 'edit') {
     $recordId = (int)($_GET['record_id'] ?? ($_POST['record_id'] ?? 0));
-    $rStmt = $pdo->prepare("SELECT * FROM employment_records WHERE id = :id AND applicant_id = :aid");
+    $rStmt = $pdo->prepare("SELECT * FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid");
     $rStmt->execute([':id' => $recordId, ':aid' => $applicantId]);
     $found = $rStmt->fetch();
     if ($found) {

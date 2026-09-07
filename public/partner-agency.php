@@ -22,22 +22,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (in_array($action, ['enable', 'disable'], true)) {
         require_role(['Administrator', 'Employee']);
         $newStatus = $action === 'enable' ? 'Active' : 'Disabled';
-        $pdo->prepare("UPDATE partner_agencies SET status = :s WHERE id = :id")->execute([':s' => $newStatus, ':id' => $id]);
-        audit_log($pdo, (int)current_user()['id'], strtoupper($action), 'partner_agencies', $id, "Partner Agency {$newStatus}");
+        $pdo->prepare("UPDATE care_jf_partner_agencies SET status = :s WHERE id = :id")->execute([':s' => $newStatus, ':id' => $id]);
+        audit_log($pdo, (int)current_user()['id'], strtoupper($action), 'care_jf_partner_agencies', $id, "Partner Agency {$newStatus}");
         flash_set('success', "Partner Agency {$newStatus}.");
     } elseif ($action === 'delete') {
         require_role(['Administrator']);
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM employment_records WHERE agency_id = :id");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_employment_records WHERE agency_id = :id");
         $countStmt->execute([':id' => $id]);
-        $userCountStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE agency_id = :id");
+        $userCountStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_users WHERE agency_id = :id");
         $userCountStmt->execute([':id' => $id]);
         if ((int)$countStmt->fetchColumn() > 0) {
             flash_set('error', 'This agency has employment history linked to it and cannot be deleted. Disable it instead to preserve historical records.');
         } elseif ((int)$userCountStmt->fetchColumn() > 0) {
             flash_set('error', 'This agency still has a Partner Agency account linked to it and cannot be deleted. Delete or reassign that account first, or disable the agency instead.');
         } else {
-            $pdo->prepare("DELETE FROM partner_agencies WHERE id = :id")->execute([':id' => $id]);
-            audit_log($pdo, (int)current_user()['id'], 'DELETE', 'partner_agencies', $id, 'Partner Agency deleted');
+            $pdo->prepare("DELETE FROM care_jf_partner_agencies WHERE id = :id")->execute([':id' => $id]);
+            audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_partner_agencies', $id, 'Partner Agency deleted');
             flash_set('success', 'Partner Agency deleted.');
         }
     }
@@ -59,8 +59,8 @@ if ($statusFilter !== '' && $statusFilter !== 'All') {
 }
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$stmt = $pdo->prepare("SELECT pa.*, (SELECT COUNT(*) FROM employment_records er WHERE er.agency_id = pa.id) AS record_count
-                        FROM partner_agencies pa $whereSql ORDER BY agency_name");
+$stmt = $pdo->prepare("SELECT pa.*, (SELECT COUNT(*) FROM care_jf_employment_records er WHERE er.agency_id = pa.id) AS record_count
+                        FROM care_jf_partner_agencies pa $whereSql ORDER BY agency_name");
 $stmt->execute($params);
 $agencies = $stmt->fetchAll();
 
