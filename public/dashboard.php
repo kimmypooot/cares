@@ -5,6 +5,73 @@ require_login();
 
 $pdo = Database::getConnection();
 
+if (is_partner_agency()) {
+    $agencyId = current_agency_id($pdo);
+
+    $agencyStmt = $pdo->prepare("SELECT * FROM partner_agencies WHERE id = :id");
+    $agencyStmt->execute([':id' => $agencyId]);
+    $agency = $agencyStmt->fetch();
+
+    // Shared applicant pool stats (every Partner Agency sees the same
+    // system-wide numbers here — the pool itself is shared, per the
+    // "Partner Agency can view registered applicants" rule).
+    $totalApplicantsPool = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0")->fetchColumn();
+    $notHiredPool = (int)$pdo->query(
+        "SELECT COUNT(*) FROM applicants a
+         LEFT JOIN employment_records er ON er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active'
+         WHERE a.is_deleted = 0 AND er.id IS NULL"
+    )->fetchColumn();
+
+    // Own-agency stat: applicants this agency has actually hired.
+    $hiredByAgencyStmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM employment_records WHERE agency_id = :aid AND is_current = 1 AND status = 'Active'"
+    );
+    $hiredByAgencyStmt->execute([':aid' => $agencyId]);
+    $hiredByAgencyCount = (int)$hiredByAgencyStmt->fetchColumn();
+
+    $pageTitle = 'Dashboard';
+    require_once __DIR__ . '/../includes/header.php';
+    require_once __DIR__ . '/../includes/sidebar.php';
+    ?>
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold text-slate-800">My Agency</h1>
+      <p class="text-sm text-slate-500"><?= e($agency['agency_name']) ?></p>
+    </div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <?php
+      $paCards = [
+          ['label' => 'Total Registered Applicants',  'value' => $totalApplicantsPool, 'icon' => 'fa-users',          'color' => 'text-brand-600 bg-brand-50'],
+          ['label' => 'Available for Recruitment',     'value' => $notHiredPool,        'icon' => 'fa-hourglass-half', 'color' => 'text-gray-600 bg-gray-100'],
+          ['label' => 'Applicants Not Hired',           'value' => $notHiredPool,        'icon' => 'fa-user-clock',     'color' => 'text-gray-600 bg-gray-100'],
+          ['label' => 'Hired by This Agency',           'value' => $hiredByAgencyCount,  'icon' => 'fa-briefcase',      'color' => 'text-green-600 bg-green-50'],
+      ];
+      foreach ($paCards as $c): ?>
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
+        <div class="w-11 h-11 rounded-lg flex items-center justify-center <?= $c['color'] ?>">
+          <i class="fa-solid <?= $c['icon'] ?>"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-500 font-medium"><?= e($c['label']) ?></p>
+          <p class="text-xl font-bold text-slate-800"><?= number_format($c['value']) ?></p>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-8">
+      <p class="text-sm text-slate-600">
+        Browse the full applicant pool under <a href="applicants.php" class="text-brand-600 font-medium hover:underline">Applicants</a>,
+        or view your agency's profile under <a href="my-agency.php" class="text-brand-600 font-medium hover:underline">My Partner Agency</a>.
+      </p>
+    </div>
+    <?php
+    require_once __DIR__ . '/../includes/footer.php';
+    exit;
+}
+
+$pendingAgencyCount = can_manage_users()
+    ? (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Partner Agency' AND status = 'Pending'")->fetchColumn()
+    : 0;
+
 // ---- Summary counts ----
 $totalApplicants = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0")->fetchColumn();
 $maleCount   = (int)$pdo->query("SELECT COUNT(*) FROM applicants WHERE is_deleted = 0 AND sex='MALE'")->fetchColumn();
@@ -79,6 +146,13 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </a>
   </div>
 </div>
+
+<?php if ($pendingAgencyCount > 0): ?>
+<a href="users.php?tab=partner-agencies" class="block mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 hover:bg-amber-100 transition">
+  <i class="fa-solid fa-building-circle-exclamation mr-2"></i>
+  Pending Partner Agency Registrations: <?= $pendingAgencyCount ?> — click to review.
+</a>
+<?php endif; ?>
 
 <!-- Summary Cards -->
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
