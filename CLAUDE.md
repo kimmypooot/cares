@@ -80,7 +80,7 @@ employment history attached. A row's employment status label (`Job Order` /
 `Temporary` / `COS` / `Permanent` / `Casual` / `Other` / "For Further
 Review") is never stored as an applicant field — it's *derived* per-request
 by `current_employment_status()` / `is_applicant_hired()` in
-`includes/functions.php`, which look for an `employment_records` row with
+`includes/functions.php`, which look for a `care_jf_employment_records` row with
 `is_current = 1 AND status = 'Active'`. A Disabled current-employment row
 does **not** count as "hired" — don't shortcut this by reading
 `is_current` alone.

@@ -24,6 +24,17 @@
 -- against the new database, you can remove it manually with:
 --   DROP DATABASE applicant_system;
 --
+-- Unlike the other migrations in this repo, this one is NOT safe to run
+-- twice — the second run will fail with "table doesn't exist" since the
+-- RENAME TABLE has already moved the source tables. Run it exactly once.
+--
+-- Note: this migration does NOT rewrite historical audit_logs.table_name
+-- values (e.g. old rows still say 'users', not 'care_jf_users') — those
+-- are a factual record of what the table was actually called at the time
+-- each action happened, and rewriting them would misrepresent history.
+-- Only new audit log entries created after this migration will use the
+-- new table names.
+--
 -- Usage:
 --   mysql -u root -p < database/migrations/rename_database_and_tables.sql
 -- =====================================================================

@@ -31,6 +31,10 @@ mysql -u root -p applicant_system < database/migrations/add_hired_status_and_upp
 mysql -u root -p < database/migrations/rename_database_and_tables.sql
 ```
 
+(Once you've confirmed the application works correctly, the now-empty
+`applicant_system` database can be removed with `DROP DATABASE
+applicant_system;`.)
+
 Default administrator account: `admin` / `Admin@123` — **change this
 immediately** via Settings after first login.
 
@@ -102,8 +106,12 @@ ini_set('session.cookie_secure', '1');
 /applicant-system
 ├── config/database.php
 ├── database/
-│   ├── database.sql                              Fresh-install schema (v2)
-│   └── migrations/update_application_management.sql   Non-destructive v1→v2 upgrade
+│   ├── database.sql                                             Fresh-install schema (v2)
+│   └── migrations/
+│       ├── update_application_management.sql                    Non-destructive v1→v2 upgrade
+│       ├── add_partner_agency_accounts.sql                       Adds partner agency accounts
+│       ├── add_hired_status_and_uppercase_backfill.sql           Adds hired status + uppercase backfill
+│       └── rename_database_and_tables.sql                        Renames DB to care_job_fair_db, prefixes tables with care_jf_
 ├── includes/            auth.php, csrf.php, functions.php, header.php, footer.php, sidebar.php
 ├── public/               Web-accessible root
 │   ├── login.php                  Landing hub: Login / Register Applicant / Sign Up
@@ -155,5 +163,5 @@ summary).
   integrity; hard delete is blocked server-side if an agency still has
   employment history attached.
 - Every login, logout, create, update, delete, enable/disable, role change,
-  and password reset is written to `audit_logs` with the acting user, IP
-  address, and a description.
+  and password reset is written to `care_jf_audit_logs` with the acting user,
+  IP address, and a description.
