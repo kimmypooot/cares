@@ -85,6 +85,7 @@ $statusCounts = [
     'Permanent'     => 0,
     'Casual'        => 0,
     'Other'         => 0,
+    'Hired'         => 0,
 ];
 
 // A row only counts toward "hired" classification if it's the current AND
@@ -207,7 +208,7 @@ const palette = ['#3b63f5','#22c55e','#eab308','#a855f7','#ef4444','#0ea5e9'];
 new Chart(document.getElementById('chartApplicantStatus'), {
   type: 'doughnut',
   data: {
-    labels: ['Hired', 'Not Hired'],
+    labels: ['HIRED', 'NOT HIRED'],
     datasets: [{ data: [<?= $hiredCount ?>, <?= $notHiredCount ?>], backgroundColor: ['#22c55e', '#94a3b8'] }]
   },
   options: { plugins: { legend: { position: 'bottom' } } }
@@ -216,7 +217,7 @@ new Chart(document.getElementById('chartApplicantStatus'), {
 new Chart(document.getElementById('chartStatus'), {
   type: 'bar',
   data: {
-    labels: <?= json_encode(array_keys($statusCounts)) ?>,
+    labels: <?= json_encode(array_map('strtoupper', array_keys($statusCounts))) ?>,
     datasets: [{ label: 'Applicants', data: <?= json_encode(array_values($statusCounts)) ?>, backgroundColor: palette }]
   },
   options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }

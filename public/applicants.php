@@ -44,7 +44,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <select x-model="filters.employment_status" @change="load(1)" class="rounded-lg border border-slate-300 text-sm py-2 px-3">
         <option value="All">All Employment Status</option>
         <option>For Further Review</option><option>Job Order</option>
-        <option>Temporary</option><option>COS</option><option>Permanent</option><option>Casual</option>
+        <option>Temporary</option><option>COS</option><option>Permanent</option><option>Casual</option><option>Hired</option>
       </select>
     </div>
     <div class="flex justify-end mt-3">
@@ -91,12 +91,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <td class="px-4 py-3" data-label="Civil Status" x-text="row.civil_status"></td>
               <td class="px-4 py-3" data-label="Services">
                 <template x-for="svc in row.services_availed" :key="svc">
-                  <span class="inline-block px-2 py-0.5 mr-1 mb-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700" x-text="svc"></span>
+                  <span class="inline-block px-2 py-0.5 mr-1 mb-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 uppercase" x-text="svc"></span>
                 </template>
                 <span x-show="!row.services_availed || row.services_availed.length === 0" class="text-slate-300 text-xs">—</span>
               </td>
               <td class="px-4 py-3" data-label="Employment">
-                <span class="px-2 py-1 rounded-full text-xs font-medium"
+                <span class="px-2 py-1 rounded-full text-xs font-medium uppercase"
                       :class="statusColor(row.employment_status)" x-text="row.employment_status"></span>
               </td>
               <td class="px-4 py-3" data-label="Registered" x-text="row.date_registered"></td>
@@ -148,6 +148,7 @@ function applicantTable() {
         'Temporary': 'bg-purple-100 text-purple-800',
         'Permanent': 'bg-green-100 text-green-800',
         'Casual': 'bg-orange-100 text-orange-800',
+        'Hired': 'bg-emerald-100 text-emerald-800',
       };
       return map[status] || 'bg-gray-100 text-gray-700';
     },

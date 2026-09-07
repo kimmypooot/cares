@@ -233,7 +233,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <td class="px-4 py-2.5"><?= e(full_name($r)) ?></td>
             <td class="px-4 py-2.5"><?= e($r['sex']) ?></td>
             <td class="px-4 py-2.5"><?= e($r['civil_status']) ?></td>
-            <td class="px-4 py-2.5">
+            <td class="px-4 py-2.5 uppercase">
               <?php
                 $svc = [];
                 if ($r['service_job_seeker']) $svc[] = 'Job Seeker';
@@ -243,7 +243,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
             </td>
             <td class="px-4 py-2.5"><?= e($r['agency_company_name'] ?: '—') ?></td>
             <td class="px-4 py-2.5"><?= format_date($r['date_hired'] ?? null) ?></td>
-            <td class="px-4 py-2.5"><?= e($r['employment_status'] ?: 'For Further Review') ?></td>
+            <td class="px-4 py-2.5 uppercase"><?= e($r['employment_status'] ?: 'For Further Review') ?></td>
           </tr>
           <?php endforeach; ?>
         </tbody>
