@@ -4,7 +4,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role(['Administrator', 'Employee']);
 
 $pdo = Database::getConnection();
-$statusOptions = ['Job Order', 'Temporary', 'COS', 'Permanent', 'Casual', 'Other'];
+$statusOptions = ['Job Order', 'Temporary', 'COS', 'Permanent', 'Casual', 'Other', 'Hired'];
 $errors = [];
 
 // ---------------------------------------------------------------------
@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $applicantId = (int)($_POST['applicant_id'] ?? 0);
     $agencyId = !empty($_POST['agency_id']) ? (int)$_POST['agency_id'] : null;
-    $agencyFreeText = clean($_POST['agency_free_text'] ?? '');
+    $agencyFreeText = mb_strtoupper(clean($_POST['agency_free_text'] ?? ''), 'UTF-8');
     $dateHired = clean($_POST['date_hired'] ?? '');
     $status = clean($_POST['employment_status'] ?? '');
     $isCurrent = isset($_POST['is_current']) ? 1 : 0;
@@ -162,7 +162,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <div class="grid sm:grid-cols-2 gap-4" x-show="agencySel === ''">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Agency / Company Name (manual)</label>
-          <input type="text" name="agency_free_text" value="<?= $record['agency_id'] ? '' : e($record['agency_company_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="agency_free_text" value="<?= $record['agency_id'] ? '' : e($record['agency_company_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Agency / Company Address (manual)</label>

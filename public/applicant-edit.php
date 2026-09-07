@@ -33,7 +33,7 @@ $old['employment_classification'] = $currentEmployment['employment_status'] ?? '
 // is a general note about the applicant, independent of employment status,
 // so it must not depend on whether a current employment record exists.
 
-$classOptions = ['Job Order', 'Temporary', 'COS', 'Permanent', 'Casual', 'Other'];
+$classOptions = ['Job Order', 'Temporary', 'COS', 'Permanent', 'Casual', 'Other', 'Hired'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
@@ -41,11 +41,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (['last_name','first_name','middle_name','extension_name','sex','date_of_birth','place_of_birth','contact_number','email_address','address','civil_status'] as $key) {
         $old[$key] = clean($_POST[$key] ?? '');
     }
+
+    // Normalize to uppercase server-side too — defense in depth. Email is
+    // deliberately excluded (kept as typed).
+    foreach (['last_name', 'first_name', 'middle_name', 'place_of_birth', 'address'] as $upperKey) {
+        $old[$upperKey] = mb_strtoupper($old[$upperKey], 'UTF-8');
+    }
     $old['service_job_seeker'] = isset($_POST['service_job_seeker']);
     $old['service_agency_services'] = isset($_POST['service_agency_services']);
     $old['employment_status_flag'] = clean($_POST['employment_status_flag'] ?? 'Not Yet');
     $old['agency_id'] = clean($_POST['agency_id'] ?? '');
-    $old['agency_free_text'] = clean($_POST['agency_free_text'] ?? '');
+    $old['agency_free_text'] = mb_strtoupper(clean($_POST['agency_free_text'] ?? ''), 'UTF-8');
     $old['date_hired'] = clean($_POST['date_hired'] ?? '');
     $old['employment_classification'] = clean($_POST['employment_classification'] ?? '');
     $old['remarks'] = clean($_POST['remarks'] ?? '');
@@ -227,17 +233,17 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <div class="grid sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Last Name <span class="text-red-500">*</span></label>
-          <input type="text" name="last_name" required value="<?= e($old['last_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="last_name" required value="<?= e($old['last_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['last_name']) ? 'hidden' : '' ?>" data-error-for="last_name"><?= e($errors['last_name'] ?? '') ?></p>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">First Name <span class="text-red-500">*</span></label>
-          <input type="text" name="first_name" required value="<?= e($old['first_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="first_name" required value="<?= e($old['first_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['first_name']) ? 'hidden' : '' ?>" data-error-for="first_name"><?= e($errors['first_name'] ?? '') ?></p>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Middle Name</label>
-          <input type="text" name="middle_name" value="<?= e($old['middle_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="middle_name" value="<?= e($old['middle_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Extension Name</label>
@@ -269,7 +275,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Place of Birth</label>
-          <input type="text" name="place_of_birth" value="<?= e($old['place_of_birth'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="place_of_birth" value="<?= e($old['place_of_birth'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Contact Number <span class="text-red-500">*</span></label>
@@ -283,7 +289,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
         <div class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Address <span class="text-red-500">*</span></label>
-          <textarea name="address" required rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['address']) ?></textarea>
+          <textarea name="address" required rows="2" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['address']) ?></textarea>
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['address']) ? 'hidden' : '' ?>" data-error-for="address"><?= e($errors['address'] ?? '') ?></p>
         </div>
       </div>
@@ -314,7 +320,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
         <div x-show="agencySel === ''">
           <label class="block text-sm font-medium text-slate-700 mb-1">Agency Name (manual)</label>
-          <input type="text" name="agency_free_text" value="<?= e($old['agency_free_text']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="agency_free_text" value="<?= e($old['agency_free_text']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <div>

@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'create') {
         // Field order per spec: Full Name, Username, Temporary Password, Role
-        $fullName = clean($_POST['full_name'] ?? '');
+        $fullName = mb_strtoupper(clean($_POST['full_name'] ?? ''), 'UTF-8');
         $username = clean($_POST['username'] ?? '');
         $password = (string)($_POST['password'] ?? '');
         $role = clean($_POST['role'] ?? '');
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'edit') {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $fullName = clean($_POST['full_name'] ?? '');
+        $fullName = mb_strtoupper(clean($_POST['full_name'] ?? ''), 'UTF-8');
         $role = clean($_POST['role'] ?? '');
 
         if ($fullName === '') $errors['edit_full_name'] = 'Full name is required.';
@@ -349,7 +349,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <div class="grid sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Full Name <span class="text-red-500">*</span></label>
-          <input type="text" name="full_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="full_name" required class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['full_name']) ? 'hidden' : '' ?>" data-error-for="full_name"><?= e($errors['full_name'] ?? '') ?></p>
         </div>
         <div>
@@ -433,7 +433,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
-                <input type="text" name="full_name" required value="<?= e($u['full_name']) ?>" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+                <input type="text" name="full_name" required value="<?= e($u['full_name']) ?>" class="uppercase-field uppercase rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1">Role</label>

@@ -26,9 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_role(['Partner Agency']);
     csrf_require();
 
-    $old['agency_name']    = clean($_POST['agency_name'] ?? '');
-    $old['address']        = clean($_POST['address'] ?? '');
-    $old['contact_person'] = clean($_POST['contact_person'] ?? '');
+    $old['agency_name']    = mb_strtoupper(clean($_POST['agency_name'] ?? ''), 'UTF-8');
+    $old['address']        = mb_strtoupper(clean($_POST['address'] ?? ''), 'UTF-8');
+    $old['contact_person'] = mb_strtoupper(clean($_POST['contact_person'] ?? ''), 'UTF-8');
     $old['contact_no']     = clean($_POST['contact_no'] ?? '');
     $old['email']          = clean($_POST['email'] ?? '');
 
@@ -78,18 +78,18 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Agency Name <span class="text-red-500">*</span></label>
-        <input type="text" name="agency_name" required value="<?= e($old['agency_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+        <input type="text" name="agency_name" required value="<?= e($old['agency_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         <p class="text-xs text-red-500 mt-1" data-error-for="agency_name"><?= e($errors['agency_name'] ?? '') ?></p>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Address <span class="text-red-500">*</span></label>
-        <textarea name="address" required rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['address']) ?></textarea>
+        <textarea name="address" required rows="2" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['address']) ?></textarea>
         <p class="text-xs text-red-500 mt-1" data-error-for="address"><?= e($errors['address'] ?? '') ?></p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Contact Person <span class="text-red-500">*</span></label>
-          <input type="text" name="contact_person" required value="<?= e($old['contact_person']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="contact_person" required value="<?= e($old['contact_person']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1" data-error-for="contact_person"><?= e($errors['contact_person'] ?? '') ?></p>
         </div>
         <div>

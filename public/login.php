@@ -48,9 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
     csrf_require();
     $activePanel = 'register';
 
-    $regOld['agency_name']    = clean($_POST['agency_name'] ?? '');
-    $regOld['address']        = clean($_POST['address'] ?? '');
-    $regOld['contact_person'] = clean($_POST['contact_person'] ?? '');
+    $regOld['agency_name']    = mb_strtoupper(clean($_POST['agency_name'] ?? ''), 'UTF-8');
+    $regOld['address']        = mb_strtoupper(clean($_POST['address'] ?? ''), 'UTF-8');
+    $regOld['contact_person'] = mb_strtoupper(clean($_POST['contact_person'] ?? ''), 'UTF-8');
     $regOld['contact_no']     = clean($_POST['contact_no'] ?? '');
     $regOld['email']          = clean($_POST['email'] ?? '');
     $regOld['username']       = clean($_POST['username'] ?? '');
@@ -243,18 +243,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
             <div class="space-y-3">
               <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">Agency Name <span class="text-red-500">*</span></label>
-                <input type="text" name="agency_name" required value="<?= e($regOld['agency_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <input type="text" name="agency_name" required value="<?= e($regOld['agency_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 <p class="text-xs text-red-500 mt-1"><?= e($regErrors['agency_name'] ?? '') ?></p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">Address <span class="text-red-500">*</span></label>
-                <input type="text" name="address" required value="<?= e($regOld['address']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <input type="text" name="address" required value="<?= e($regOld['address']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 <p class="text-xs text-red-500 mt-1"><?= e($regErrors['address'] ?? '') ?></p>
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-sm font-medium text-slate-700 mb-1">Contact Person <span class="text-red-500">*</span></label>
-                  <input type="text" name="contact_person" required value="<?= e($regOld['contact_person']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <input type="text" name="contact_person" required value="<?= e($regOld['contact_person']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                   <p class="text-xs text-red-500 mt-1"><?= e($regErrors['contact_person'] ?? '') ?></p>
                 </div>
                 <div>

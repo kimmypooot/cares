@@ -17,6 +17,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old[$key] = clean($_POST[$key] ?? '');
     }
 
+    // Normalize to uppercase server-side too — defense in depth in case
+    // JavaScript is disabled or the form is submitted directly.
+    foreach (['last_name', 'first_name', 'middle_name', 'address'] as $upperKey) {
+        $old[$upperKey] = mb_strtoupper($old[$upperKey], 'UTF-8');
+    }
+
     // ---- Server-side validation ----
     if ($old['last_name'] === '')  $errors['last_name'] = 'Last name is required.';
     if ($old['first_name'] === '') $errors['first_name'] = 'First name is required.';
@@ -110,20 +116,20 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Last Name <span class="text-red-500">*</span></label>
           <input type="text" name="last_name" required value="<?= e($old['last_name']) ?>"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
+                 class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['last_name']) ? 'hidden' : '' ?>" data-error-for="last_name"><?= e($errors['last_name'] ?? '') ?></p>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">First Name <span class="text-red-500">*</span></label>
           <input type="text" name="first_name" required value="<?= e($old['first_name']) ?>"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
+                 class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['first_name']) ? 'hidden' : '' ?>" data-error-for="first_name"><?= e($errors['first_name'] ?? '') ?></p>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Middle Name</label>
           <input type="text" name="middle_name" value="<?= e($old['middle_name']) ?>"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
+                 class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none">
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Extension Name</label>
@@ -170,7 +176,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Address <span class="text-red-500">*</span></label>
           <textarea name="address" required rows="2"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none"><?= e($old['address']) ?></textarea>
+                    class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none"><?= e($old['address']) ?></textarea>
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['address']) ? 'hidden' : '' ?>" data-error-for="address"><?= e($errors['address'] ?? '') ?></p>
         </div>
       </div>
