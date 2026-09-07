@@ -128,7 +128,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (is_last_active_admin($pdo, $userId)) {
             flash_set('error', 'Cannot disable the only active Administrator account.');
         } else {
-            $pdo->prepare("UPDATE users SET is_active = NOT is_active WHERE id = :id")->execute([':id' => $userId]);
+            $statusStmt = $pdo->prepare("SELECT status FROM users WHERE id = :id");
+            $statusStmt->execute([':id' => $userId]);
+            $currentStatus = $statusStmt->fetchColumn();
+            set_user_status($pdo, $userId, $currentStatus === 'Active' ? 'Disabled' : 'Active');
             audit_log($pdo, $currentUserId, 'UPDATE', 'users', $userId, 'Toggled user active status');
             flash_set('success', 'User status updated.');
         }
@@ -157,26 +160,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('success', 'Password reset successfully.');
         }
         redirect('users.php');
+    } elseif ($action === 'activate_agency') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        set_user_status($pdo, $userId, 'Active');
+        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACTIVATE', 'users', $userId, 'Partner Agency account activated');
+        flash_set('success', 'Partner Agency account activated.');
+        redirect('users.php?tab=partner-agencies');
+    } elseif ($action === 'disable_agency') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        set_user_status($pdo, $userId, 'Disabled');
+        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_DISABLE', 'users', $userId, 'Partner Agency account disabled');
+        flash_set('success', 'Partner Agency account disabled.');
+        redirect('users.php?tab=partner-agencies');
+    } elseif ($action === 'reenable_agency') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        set_user_status($pdo, $userId, 'Active');
+        audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_REENABLE', 'users', $userId, 'Partner Agency account re-enabled');
+        flash_set('success', 'Partner Agency account re-enabled.');
+        redirect('users.php?tab=partner-agencies');
+    } elseif ($action === 'delete_agency_account') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT agency_id FROM users WHERE id = :id AND role = 'Partner Agency'");
+        $stmt->execute([':id' => $userId]);
+        $agencyId = $stmt->fetchColumn();
+        if (!$agencyId) {
+            flash_set('error', 'Partner Agency account not found.');
+        } else {
+            $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
+            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACCOUNT_DELETE', 'users', $userId, 'Partner Agency account deleted');
+            flash_set('success', 'Partner Agency account deleted.');
+        }
+        redirect('users.php?tab=partner-agencies');
     }
 }
 
-$users = $pdo->query("SELECT * FROM users ORDER BY created_at DESC")->fetchAll();
+$users = $pdo->query("SELECT * FROM users WHERE role <> 'Partner Agency' ORDER BY created_at DESC")->fetchAll();
+$agencyAccounts = $pdo->query(
+    "SELECT u.id, u.username, u.status AS account_status, u.created_at,
+            pa.agency_name, pa.contact_person, pa.contact_no, pa.email, pa.status AS agency_status
+     FROM users u
+     JOIN partner_agencies pa ON pa.id = u.agency_id
+     WHERE u.role = 'Partner Agency'
+     ORDER BY u.created_at DESC"
+)->fetchAll();
+$initialTab = ($_GET['tab'] ?? '') === 'partner-agencies' ? 'partner-agencies' : 'users';
 
 $pageTitle = 'Manage Users';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
-<div class="space-y-6" x-data="{ showCreate: false, editingId: null, resettingId: null }">
+<div class="space-y-6" x-data="{ tab: '<?= $initialTab ?>', showCreate: false, editingId: null, resettingId: null }">
   <div class="flex items-center justify-between flex-wrap gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-slate-800">System Users</h1>
-      <p class="text-sm text-slate-500">Manage login accounts and role-based permissions.</p>
+      <h1 class="text-2xl font-bold text-slate-800">Manage Users</h1>
+      <p class="text-sm text-slate-500">Manage login accounts, role-based permissions, and Partner Agency approvals.</p>
     </div>
-    <button @click="showCreate = !showCreate" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
+    <button x-show="tab === 'users'" @click="showCreate = !showCreate" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
       <i class="fa-solid fa-user-plus"></i> New User
     </button>
   </div>
+
+  <div class="flex gap-2 border-b border-slate-200">
+    <button @click="tab = 'users'" :class="tab==='users' ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px">
+      System Users
+    </button>
+    <button @click="tab = 'partner-agencies'" :class="tab==='partner-agencies' ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px">
+      Partner Agency Accounts
+      <?php $pendingCount = count(array_filter($agencyAccounts, fn($a) => $a['account_status'] === 'Pending')); ?>
+      <?php if ($pendingCount > 0): ?>
+        <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800"><?= $pendingCount ?></span>
+      <?php endif; ?>
+    </button>
+  </div>
+
+  <div x-show="tab === 'partner-agencies'" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+    <table class="min-w-full text-sm responsive-cards">
+      <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+        <tr>
+          <th class="px-4 py-2.5 text-left">Agency Name</th>
+          <th class="px-4 py-2.5 text-left">Contact Person</th>
+          <th class="px-4 py-2.5 text-left">Contact No</th>
+          <th class="px-4 py-2.5 text-left">Email</th>
+          <th class="px-4 py-2.5 text-left">Username</th>
+          <th class="px-4 py-2.5 text-left">Registered</th>
+          <th class="px-4 py-2.5 text-left">Account Status</th>
+          <th class="px-4 py-2.5 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php if (!$agencyAccounts): ?>
+          <tr><td colspan="8" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
+        <?php endif; ?>
+        <?php foreach ($agencyAccounts as $a):
+          $statusColors = ['Pending' => 'bg-amber-100 text-amber-800', 'Active' => 'bg-green-100 text-green-700', 'Disabled' => 'bg-gray-100 text-gray-600'];
+        ?>
+        <tr>
+          <td class="px-4 py-2.5 font-medium" data-label="Agency"><?= e($a['agency_name']) ?></td>
+          <td class="px-4 py-2.5" data-label="Contact Person"><?= e($a['contact_person'] ?: '—') ?></td>
+          <td class="px-4 py-2.5" data-label="Contact No"><?= e($a['contact_no'] ?: '—') ?></td>
+          <td class="px-4 py-2.5" data-label="Email"><?= e($a['email'] ?: '—') ?></td>
+          <td class="px-4 py-2.5" data-label="Username"><?= e($a['username']) ?></td>
+          <td class="px-4 py-2.5 text-slate-500" data-label="Registered"><?= format_date($a['created_at']) ?></td>
+          <td class="px-4 py-2.5" data-label="Status">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $statusColors[$a['account_status']] ?? 'bg-gray-100 text-gray-600' ?>"><?= e($a['account_status']) ?></span>
+            <?php if ($a['agency_status'] === 'Disabled'): ?>
+              <span class="block text-[10px] text-red-500 mt-0.5">Agency record disabled</span>
+            <?php endif; ?>
+          </td>
+          <td class="px-4 py-2.5 text-right" data-label="Actions">
+            <?php if ($a['account_status'] === 'Pending'): ?>
+              <form method="POST" class="inline">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="activate_agency">
+                <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
+                <button type="submit" class="px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-medium">Activate</button>
+              </form>
+            <?php elseif ($a['account_status'] === 'Active'): ?>
+              <form method="POST" class="inline">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="disable_agency">
+                <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
+                <button type="submit" class="px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 text-xs font-medium">Disable</button>
+              </form>
+            <?php else: ?>
+              <form method="POST" class="inline">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="reenable_agency">
+                <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
+                <button type="submit" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium">Re-enable</button>
+              </form>
+            <?php endif; ?>
+            <form method="POST" class="inline">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="delete_agency_account">
+              <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
+              <button type="button" data-confirm-delete="<?= e($a['agency_name'] . ' (' . $a['username'] . ')') ?>" class="text-slate-500 hover:text-red-600 px-1.5" title="Delete Account"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <div x-show="tab === 'users'" x-cloak>
 
   <!-- Create form: field order = Full Name, Username, Temporary Password, Role -->
   <div x-show="showCreate" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
@@ -233,8 +361,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <td class="px-4 py-2.5" data-label="Username"><?= e($u['username']) ?></td>
           <td class="px-4 py-2.5" data-label="Role"><?= e($u['role']) ?></td>
           <td class="px-4 py-2.5" data-label="Status">
-            <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $u['is_active'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>">
-              <?= $u['is_active'] ? 'Active' : ($u['role'] === 'Viewer' ? 'Pending/Disabled' : 'Disabled') ?>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $u['status'] === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>">
+              <?= e($u['status']) ?>
             </span>
           </td>
           <td class="px-4 py-2.5 text-slate-500" data-label="Created"><?= format_date($u['created_at']) ?></td>
@@ -304,6 +432,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <?php endforeach; ?>
       </tbody>
     </table>
+  </div>
   </div>
 </div>
 
