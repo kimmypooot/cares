@@ -42,11 +42,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         audit_log($pdo, (int)current_user()['id'], 'DELETE', 'employment_records', $recordId, 'Employment record deleted');
         flash_set('success', 'Employment record deleted.');
         redirect('applicant-view.php?id=' . $id);
+    } elseif ($action === 'mark_hired') {
+        if (!can_manage_employment() && !is_partner_agency()) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
+        }
+
+        // Agency identity is always server-derived for a Partner Agency —
+        // never trusted from the request. Administrator/Employee explicitly
+        // choose which agency to credit with the hire.
+        if (is_partner_agency()) {
+            $hireAgencyId = current_agency_id($pdo);
+        } else {
+            $hireAgencyId = !empty($_POST['agency_id']) ? (int)$_POST['agency_id'] : null;
+        }
+
+        if (!$hireAgencyId) {
+            flash_set('error', 'Select a Partner Agency to hire this applicant into.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $agStmt = $pdo->prepare("SELECT agency_name, address FROM partner_agencies WHERE id = :id");
+        $agStmt->execute([':id' => $hireAgencyId]);
+        $hireAgencyRow = $agStmt->fetch();
+        if (!$hireAgencyRow) {
+            flash_set('error', 'Selected Partner Agency was not found.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        // Guard against a double-hire: only proceed if the applicant genuinely
+        // still has no current active employment record right now.
+        $hireCheckStmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
+        );
+        $hireCheckStmt->execute([':id' => $id]);
+        if ((int)$hireCheckStmt->fetchColumn() > 0) {
+            flash_set('error', 'This applicant has already been hired.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $hireStmt = $pdo->prepare(
+            "INSERT INTO employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
+             VALUES (:aid, :agid, :agency, :address, CURDATE(), 'Hired', 1, 'Active')"
+        );
+        $hireStmt->execute([
+            ':aid' => $id, ':agid' => $hireAgencyId,
+            ':agency' => $hireAgencyRow['agency_name'], ':address' => $hireAgencyRow['address'],
+        ]);
+        $newHireId = (int)$pdo->lastInsertId();
+        audit_log($pdo, (int)current_user()['id'], 'MARK_HIRED', 'employment_records', $newHireId,
+            "Applicant {$applicant['applicant_code']} marked Hired by {$hireAgencyRow['agency_name']}");
+        flash_set('success', 'Applicant marked as Hired.');
+        redirect('applicant-view.php?id=' . $id);
     }
 }
 
 $empStmt = $pdo->prepare(
-    "SELECT er.*, COALESCE(pa.agency_name, er.agency_company_name) AS agency_display_name
+    "SELECT er.*, COALESCE(pa.agency_name, er.agency_company_name) AS agency_display_name,
+            pa.contact_person AS agency_contact_person, pa.contact_no AS agency_contact_no, pa.email AS agency_email
      FROM employment_records er
      LEFT JOIN partner_agencies pa ON pa.id = er.agency_id
      WHERE er.applicant_id = :id ORDER BY er.date_hired DESC, er.id DESC"
@@ -55,6 +108,14 @@ $empStmt->execute([':id' => $id]);
 $employmentRecords = $empStmt->fetchAll();
 
 $status = current_employment_status($pdo, $id);
+
+$hireAgencies = can_manage_employment() ? active_agencies($pdo) : [];
+$myAgencyName = '';
+if (is_partner_agency()) {
+    $myAgencyStmt = $pdo->prepare("SELECT agency_name FROM partner_agencies WHERE id = :id");
+    $myAgencyStmt->execute([':id' => current_agency_id($pdo)]);
+    $myAgencyName = (string)$myAgencyStmt->fetchColumn();
+}
 
 $pageTitle = 'Applicant Profile';
 require_once __DIR__ . '/../includes/header.php';
@@ -110,7 +171,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               ?>
               <?php if ($svc): ?>
                 <?php foreach ($svc as $s): ?>
-                  <span class="inline-block px-2 py-0.5 mr-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700"><?= e($s) ?></span>
+                  <span class="inline-block px-2 py-0.5 mr-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 uppercase"><?= e($s) ?></span>
                 <?php endforeach; ?>
               <?php else: ?>
                 <span class="text-slate-400">—</span>
@@ -158,7 +219,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                   <?php endif; ?>
                 </td>
                 <td class="py-2.5 pr-3"><?= format_date($rec['date_hired']) ?></td>
-                <td class="py-2.5 pr-3"><?= e($rec['employment_status']) ?></td>
+                <td class="py-2.5 pr-3 uppercase"><?= e($rec['employment_status']) ?></td>
                 <td class="py-2.5 pr-3">
                   <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $rec['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($rec['status']) ?></span>
                 </td>
@@ -204,7 +265,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
 
     <div class="space-y-6">
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ showHireConfirm: false, hireAgencyId: '' }">
         <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-3">Employment Status</h2>
         <span class="inline-block px-3 py-1.5 rounded-full text-sm font-semibold <?= $status['color'] ?>"><?= e(strtoupper($status['label'])) ?></span>
         <?php
@@ -215,11 +276,55 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <dl class="mt-4 space-y-2 text-sm">
             <div><dt class="text-slate-500">Agency/Company</dt><dd class="font-medium text-slate-800"><?= e($current['agency_display_name']) ?></dd></div>
             <div><dt class="text-slate-500">Address</dt><dd class="font-medium text-slate-800"><?= e($current['agency_company_address']) ?></dd></div>
+            <?php if (!empty($current['agency_id'])): ?>
+              <?php if (!empty($current['agency_contact_person'])): ?>
+              <div><dt class="text-slate-500">Agency Contact Person</dt><dd class="font-medium text-slate-800"><?= e($current['agency_contact_person']) ?></dd></div>
+              <?php endif; ?>
+              <?php if (!empty($current['agency_contact_no'])): ?>
+              <div><dt class="text-slate-500">Agency Contact No</dt><dd class="font-medium text-slate-800"><?= e($current['agency_contact_no']) ?></dd></div>
+              <?php endif; ?>
+              <?php if (!empty($current['agency_email'])): ?>
+              <div><dt class="text-slate-500">Agency Email</dt><dd class="font-medium text-slate-800"><?= e($current['agency_email']) ?></dd></div>
+              <?php endif; ?>
+            <?php endif; ?>
             <div><dt class="text-slate-500">Date Hired</dt><dd class="font-medium text-slate-800"><?= format_date($current['date_hired']) ?></dd></div>
             <?php if (!empty($current['remarks'])): ?>
             <div><dt class="text-slate-500">Remarks</dt><dd class="font-medium text-slate-800"><?= e($current['remarks']) ?></dd></div>
             <?php endif; ?>
           </dl>
+        <?php elseif (can_manage_employment() || is_partner_agency()): ?>
+          <div class="mt-4 print:hidden">
+            <button type="button" @click="showHireConfirm = true" class="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm">
+              <i class="fa-solid fa-handshake mr-1"></i> Mark as Hired
+            </button>
+          </div>
+
+          <!-- Confirmation modal -->
+          <div x-show="showHireConfirm" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="showHireConfirm = false">
+              <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-circle-question text-emerald-600 mr-1"></i> Confirm Hire</h3>
+              <form method="POST">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="mark_hired">
+                <input type="hidden" name="id" value="<?= (int)$id ?>">
+                <?php if (can_manage_employment()): ?>
+                  <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
+                  <select name="agency_id" x-model="hireAgencyId" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
+                    <option value="">Select a Partner Agency</option>
+                    <?php foreach ($hireAgencies as $ag): ?>
+                      <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                <?php else: ?>
+                  <p class="text-sm text-slate-600 mb-5">Mark <?= e(full_name($applicant)) ?> as hired by <strong><?= e($myAgencyName) ?></strong>?</p>
+                <?php endif; ?>
+                <div class="flex justify-end gap-2">
+                  <button type="button" @click="showHireConfirm = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
+                  <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Confirm &amp; Mark as Hired</button>
+                </div>
+              </form>
+            </div>
+          </div>
         <?php endif; ?>
       </div>
     </div>
