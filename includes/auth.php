@@ -122,6 +122,51 @@ function can_view_audit_logs(): bool
     return current_user()['role'] === 'Administrator';
 }
 
+/** Is the current session's role Partner Agency? */
+function is_partner_agency(): bool
+{
+    return current_user()['role'] === 'Partner Agency';
+}
+
+/**
+ * The authenticated user's agency_id, always re-read from the database
+ * by the trusted session user_id — never cached in $_SESSION and never
+ * taken from a request parameter. This is the only source of truth for
+ * "which agency does this request belong to."
+ */
+function current_agency_id(PDO $pdo): ?int
+{
+    $userId = current_user()['id'];
+    if (!$userId) {
+        return null;
+    }
+    $stmt = $pdo->prepare("SELECT agency_id FROM users WHERE id = :id");
+    $stmt->execute([':id' => $userId]);
+    $agencyId = $stmt->fetchColumn();
+    return $agencyId !== null && $agencyId !== false ? (int)$agencyId : null;
+}
+
+/**
+ * 403s unless $recordAgencyId belongs to the current session's own
+ * agency. Call this before any Partner Agency read/write that targets a
+ * specific record by id, to close the IDOR gap (a Partner Agency user
+ * changing a URL/POST id to target another agency's data).
+ */
+function require_own_agency_record(PDO $pdo, ?int $recordAgencyId): void
+{
+    if ($recordAgencyId === null || $recordAgencyId !== current_agency_id($pdo)) {
+        http_response_code(403);
+        die('<h2 style="font-family:sans-serif">403 — You do not have permission to access this record.</h2>');
+    }
+}
+
+/** Set a user's account status, keeping the legacy is_active column in sync. */
+function set_user_status(PDO $pdo, int $userId, string $status): void
+{
+    $pdo->prepare("UPDATE users SET status = :s, is_active = :a WHERE id = :id")
+        ->execute([':s' => $status, ':a' => $status === 'Active' ? 1 : 0, ':id' => $userId]);
+}
+
 /** Safeguard: prevent removing/disabling/demoting the last remaining active Administrator. */
 function is_last_active_admin(PDO $pdo, int $userId): bool
 {
@@ -148,11 +193,24 @@ function attempt_login(PDO $pdo, string $username, string $password): bool
         return false;
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :u AND is_active = 1 LIMIT 1");
+    $stmt = $pdo->prepare(
+        "SELECT u.*, pa.status AS agency_status
+         FROM users u
+         LEFT JOIN partner_agencies pa ON pa.id = u.agency_id
+         WHERE u.username = :u LIMIT 1"
+    );
     $stmt->execute([':u' => $username]);
     $user = $stmt->fetch();
 
-    if ($user && password_verify($password, $user['password'])) {
+    // Agency-based access control: a Partner Agency account additionally
+    // needs its agency record to be Active — an admin can lock out an
+    // entire agency by disabling the agency record, independent of the
+    // individual account's own status.
+    $accountUsable = $user
+        && $user['status'] === 'Active'
+        && ($user['role'] !== 'Partner Agency' || $user['agency_status'] === 'Active');
+
+    if ($accountUsable && password_verify($password, $user['password'])) {
         session_regenerate_id(true);
         $_SESSION['user_id']    = $user['id'];
         $_SESSION['username']   = $user['username'];
