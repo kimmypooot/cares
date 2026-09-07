@@ -82,6 +82,22 @@ function generate_applicant_code(PDO $pdo): string
     return $prefix . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
 }
 
+/**
+ * Generate the next Employer ID for a newly-activated Partner Agency,
+ * in the format EMP-YYYY-NNNNNNN. Uses an atomic counter (never
+ * COUNT(*) + 1) so concurrent activations can never collide.
+ */
+function generate_employer_id(PDO $pdo): string
+{
+    $year = date('Y');
+    $pdo->prepare(
+        "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('employer_id', :y, 1)
+         ON DUPLICATE KEY UPDATE last_value = LAST_INSERT_ID(last_value + 1)"
+    )->execute([':y' => $year]);
+    $next = (int)$pdo->lastInsertId();
+    return 'EMP-' . $year . '-' . str_pad((string)$next, 7, '0', STR_PAD_LEFT);
+}
+
 /** Format a date consistently, e.g. "January 15, 2026" */
 function format_date(?string $date): string
 {
