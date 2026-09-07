@@ -144,6 +144,7 @@ function current_employment_status(PDO $pdo, int $applicantId): array
         'Permanent'  => 'bg-green-100 text-green-800',
         'Casual'     => 'bg-orange-100 text-orange-800',
         'Other'      => 'bg-gray-100 text-gray-700',
+        'Hired'      => 'bg-emerald-100 text-emerald-800',
     ];
 
     return ['label' => $status, 'color' => $colors[$status] ?? 'bg-gray-100 text-gray-700'];
