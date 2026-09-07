@@ -3,6 +3,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/xlsx_writer.php';
 require_login();
+// Partner Agency accounts don't get this module at all (not just hidden
+// from their sidebar) — they see their own agency info via My Partner
+// Agency instead. POST actions below are already role-checked per-action,
+// but page rendering needs its own gate too.
+if (is_partner_agency()) {
+    http_response_code(403);
+    die('<h2 style="font-family:sans-serif">403 — Partner Agency accounts do not have access to this page. See My Partner Agency instead.</h2>');
+}
 
 $pdo = Database::getConnection();
 
@@ -21,8 +29,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_role(['Administrator']);
         $countStmt = $pdo->prepare("SELECT COUNT(*) FROM employment_records WHERE agency_id = :id");
         $countStmt->execute([':id' => $id]);
+        $userCountStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE agency_id = :id");
+        $userCountStmt->execute([':id' => $id]);
         if ((int)$countStmt->fetchColumn() > 0) {
             flash_set('error', 'This agency has employment history linked to it and cannot be deleted. Disable it instead to preserve historical records.');
+        } elseif ((int)$userCountStmt->fetchColumn() > 0) {
+            flash_set('error', 'This agency still has a Partner Agency account linked to it and cannot be deleted. Delete or reassign that account first, or disable the agency instead.');
         } else {
             $pdo->prepare("DELETE FROM partner_agencies WHERE id = :id")->execute([':id' => $id]);
             audit_log($pdo, (int)current_user()['id'], 'DELETE', 'partner_agencies', $id, 'Partner Agency deleted');

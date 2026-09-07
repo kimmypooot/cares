@@ -267,9 +267,14 @@ Branches on `current_user()['role']`:
   dropdown drops any options that don't make sense per-agency (e.g.
   `by_agency` is meaningless when already scoped to one).
 - **`public/partner-agency.php` / `partner-agency-form.php`**: `Partner
-  Agency` role gets **no access** (require_role stays
-  `['Administrator','Employee']` as today) — their own agency info lives
-  on the new `my-agency.php` page instead, per §10.
+  Agency` role gets **no access**. `partner-agency-form.php` already
+  `require_role(['Administrator', 'Employee'])`s at the top, but
+  `partner-agency.php` itself was only `require_login()`-gated with role
+  checks inside individual POST actions — page *rendering* (including the
+  full agency list and `?export=xlsx`) was not actually restricted. A
+  composition-review fix pass added an explicit `is_partner_agency()` ->
+  403 guard right after `require_login()` to close that gap. Their own
+  agency info lives on the new `my-agency.php` page instead, per §10.
 
 ## 10. New page: `public/my-agency.php`
 

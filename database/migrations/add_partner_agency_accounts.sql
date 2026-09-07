@@ -48,7 +48,7 @@ ALTER TABLE users
 
 UPDATE users SET status = 'Active'   WHERE is_active = 1;
 UPDATE users SET status = 'Pending'  WHERE is_active = 0 AND role = 'Viewer';
-UPDATE users SET status = 'Disabled' WHERE is_active = 0 AND role <> 'Viewer';
+UPDATE users SET status = 'Disabled' WHERE is_active = 0 AND role NOT IN ('Viewer', 'Partner Agency');
 
 -- ---------------------------------------------------------------------
 -- 4. users: add agency_id relationship. NULL for every role except

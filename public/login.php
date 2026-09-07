@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
     <div class="w-full max-w-md">
 
       <!-- LOGIN PANEL -->
-      <div x-show="panel === 'login'" x-cloak class="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
+      <div x-show="panel === 'login'" class="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
         <h2 class="text-lg font-semibold text-slate-800 mb-1">Login</h2>
         <p class="text-sm text-slate-500 mb-6">Enter your credentials to continue.</p>
 

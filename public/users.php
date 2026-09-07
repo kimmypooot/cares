@@ -204,9 +204,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$agencyId) {
             flash_set('error', 'Partner Agency account not found.');
         } else {
-            $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
-            audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACCOUNT_DELETE', 'users', $userId, 'Partner Agency account deleted');
-            flash_set('success', 'Partner Agency account deleted.');
+            // Safety pre-check: deleting this account must not permanently
+            // strand the agency. Block if it's the agency's only account
+            // (agency name would already be taken, so it could never
+            // re-register, and there's no admin UI to create a replacement
+            // Partner Agency account) or if the agency has employment
+            // history — in both cases, Disable instead of Delete.
+            $onlyAccountStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE agency_id = :aid");
+            $onlyAccountStmt->execute([':aid' => $agencyId]);
+            $historyStmt = $pdo->prepare("SELECT COUNT(*) FROM employment_records WHERE agency_id = :aid");
+            $historyStmt->execute([':aid' => $agencyId]);
+
+            if ((int)$onlyAccountStmt->fetchColumn() <= 1) {
+                flash_set('error', 'This is the only account for this agency — deleting it would strand the agency with no way to log in or re-register. Disable the account instead.');
+            } elseif ((int)$historyStmt->fetchColumn() > 0) {
+                flash_set('error', 'This agency has employment history linked to it — the account cannot be deleted. Disable it instead.');
+            } else {
+                $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
+                audit_log($pdo, $currentUserId, 'PARTNER_AGENCY_ACCOUNT_DELETE', 'users', $userId, 'Partner Agency account deleted');
+                flash_set('success', 'Partner Agency account deleted.');
+            }
         }
         redirect('users.php?tab=partner-agencies');
     }
