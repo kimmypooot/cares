@@ -1,0 +1,18 @@
+{
+  "name": "application-management-and-monitoring-system",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i ./resources/css/input.css -o ./public/assets/css/app.build.css --minify",
+    "watch": "tailwindcss -i ./resources/css/input.css -o ./public/assets/css/app.build.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.13"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fortawesome/fontawesome-free": "^6.6.0",
+    "alpinejs": "^3.14.1",
+    "chart.js": "^4.4.4"
+  }
+}

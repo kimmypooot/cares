@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Inter, vendored locally (no CDN/Google Fonts request). Matches the
+ * modern sans-serif used in the CSC RO VIII reference design. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('../vendor/fonts/inter-latin-900-normal.woff2') format('woff2');
+}
+
+@layer utilities {
+  [x-cloak] { display: none !important; }
+}
+
+/* Sortable table header affordance */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { background-color: rgba(0,0,0,0.03); }
+
+/* Mobile card view for tables */
+@media (max-width: 767px) {
+  table.responsive-cards thead { display: none; }
+  table.responsive-cards, table.responsive-cards tbody, table.responsive-cards tr, table.responsive-cards td {
+    display: block; width: 100%;
+  }
+  table.responsive-cards tr {
+    margin-bottom: 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.75rem; overflow: hidden;
+  }
+  table.responsive-cards td {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: 0.6rem 0.9rem; border-bottom: 1px solid #f1f5f9; text-align: right;
+  }
+  table.responsive-cards td::before {
+    content: attr(data-label); font-weight: 600; color: #475569; text-align: left;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%);
+  background-size: 400% 100%;
+  animation: skeleton-loading 1.4s ease infinite;
+}
+@keyframes skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
