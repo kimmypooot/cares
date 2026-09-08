@@ -115,7 +115,7 @@ ini_set('session.cookie_secure', '1');
 │       ├── add_hired_status_and_uppercase_backfill.sql           Adds hired status + uppercase backfill
 │       ├── rename_database_and_tables.sql                        Renames DB to care_job_fair_db, prefixes tables with care_jf_
 │       └── add_job_vacancies_and_employer_id.sql                 Adds Job Vacancies module + atomic Employer ID generation
-├── includes/            auth.php, csrf.php, functions.php, header.php, footer.php, sidebar.php
+├── includes/            auth.php, csrf.php, functions.php, header.php, footer.php, sidebar.php, qr-scanner-modal.php, xlsx_writer.php
 ├── public/               Web-accessible root
 │   ├── login.php                  Landing hub: Login / Register Applicant / Sign Up
 │   ├── register-applicant.php     Public self-registration

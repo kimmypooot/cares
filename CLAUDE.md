@@ -114,8 +114,9 @@ against the current employment record then a `HAVING` clause (not `WHERE`),
 since the status is a derived/joined column.
 
 **Frontend stack:** Tailwind (compiled, not CDN) + Alpine.js + Chart.js +
-Font Awesome, all vendored locally under `public/assets/` (no external CDN
-calls at runtime — see header.php's v2 comment). Tailwind content globs are
+Font Awesome + qrcode-generator + jsQR, all vendored locally under
+`public/assets/` (no external CDN calls at runtime — see header.php's v2
+comment). Tailwind content globs are
 `./public/**/*.php` and `./includes/**/*.php` (`tailwind.config.js`) — new
 utility classes must appear in one of those to survive the production build.
 Brand color scale is `brand-{50..900}` (indigo/blue); default sans font is

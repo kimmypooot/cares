@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="text-xs text-slate-500 uppercase tracking-wide">Your Applicant ID</p>
       <p class="text-2xl font-bold text-brand-700"><?= e($applicantCode) ?></p>
     </div>
-    <?php if ($applicantCode): ?>
+    <?php if ($applicantCode !== '' && mb_check_encoding($applicantCode, 'UTF-8')): ?>
     <div class="mt-4 flex flex-col items-center">
       <canvas id="regQrCanvas" x-init="renderApplicantQr($el, <?= e(json_encode($applicantCode)) ?>)"
               class="rounded-lg border border-slate-200"></canvas>
