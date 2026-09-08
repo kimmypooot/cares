@@ -58,6 +58,17 @@ if ($dateTo !== '') {
     $where[] = 'DATE(a.created_at) <= :date_to';
     $params[':date_to'] = $dateTo;
 }
+if (is_partner_agency()) {
+    // Once hired, an applicant disappears from every OTHER agency's
+    // pool — but the hiring agency keeps seeing their own hire. This
+    // reuses the query's existing LEFT JOIN against the current
+    // active employment record (already present for current_status
+    // below) rather than adding a second join. Not hired at all
+    // (er.id IS NULL) is always visible; hired by this same agency is
+    // always visible; hired by anyone else is excluded.
+    $where[] = '(er.id IS NULL OR er.agency_id = :my_agency_id)';
+    $params[':my_agency_id'] = current_agency_id($pdo);
+}
 
 $whereSql = implode(' AND ', $where);
 

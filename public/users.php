@@ -266,7 +266,7 @@ require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
-<div class="space-y-6" x-data="{ tab: '<?= $initialTab ?>', showCreate: false, editingId: null, resettingId: null }">
+<div class="space-y-6" x-data="{ tab: '<?= $initialTab ?>', showCreate: false, editingId: null, resettingId: null, resettingAgencyId: null }">
   <div class="flex items-center justify-between flex-wrap gap-3">
     <div>
       <h1 class="text-2xl font-bold text-slate-800">Manage Users</h1>
@@ -349,11 +349,28 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <button type="submit" class="px-2.5 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium">Re-enable</button>
               </form>
             <?php endif; ?>
+            <button @click="resettingAgencyId = resettingAgencyId === <?= (int)$a['id'] ?> ? null : <?= (int)$a['id'] ?>" class="text-slate-500 hover:text-purple-600 px-1.5" title="Reset Password"><i class="fa-solid fa-key"></i></button>
             <form method="POST" class="inline">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete_agency_account">
               <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
               <button type="button" data-confirm-delete="<?= e($a['agency_name'] . ' (' . $a['username'] . ')') ?>" class="text-slate-500 hover:text-red-600 px-1.5" title="Delete Account"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        <!-- Inline reset password row -->
+        <tr x-show="resettingAgencyId === <?= (int)$a['id'] ?>" x-cloak>
+          <td colspan="9" class="px-4 py-4 bg-slate-50">
+            <form method="POST" class="flex flex-wrap items-end gap-3" onsubmit="return validateForm(this);">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="reset_password">
+              <input type="hidden" name="user_id" value="<?= (int)$a['id'] ?>">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">New Temporary Password</label>
+                <input type="password" name="new_password" required minlength="8" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+              </div>
+              <button type="submit" class="px-4 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium">Reset Password</button>
+              <button type="button" @click="resettingAgencyId = null" class="px-4 py-1.5 rounded-lg border border-slate-300 text-sm">Cancel</button>
             </form>
           </td>
         </tr>

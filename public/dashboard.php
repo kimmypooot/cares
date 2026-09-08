@@ -121,7 +121,7 @@ $regByMonth = array_reverse($regByMonth);
 // ---- Hires per month (last 6 months) — active records only ----
 $hireByMonth = $pdo->query(
     "SELECT DATE_FORMAT(date_hired, '%Y-%m') AS ym, COUNT(*) AS total
-     FROM care_jf_employment_records WHERE status = 'Active'
+     FROM care_jf_employment_records WHERE status = 'Active' AND is_current = 1
      GROUP BY ym ORDER BY ym DESC LIMIT 6"
 )->fetchAll();
 $hireByMonth = array_reverse($hireByMonth);

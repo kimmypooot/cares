@@ -118,13 +118,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             http_response_code(403);
             die('<h2 style="font-family:sans-serif">403 — Only an Administrator can delete a job vacancy.</h2>');
         }
-        // No dependent records can exist yet in Phase 1 (employment_records
-        // has no vacancy_id column until Phase 3) — once Phase 3 adds that
-        // column, a dependency check belongs here before the DELETE, same
-        // pattern as partner-agency.php's employment-history guard.
-        $pdo->prepare("DELETE FROM care_jf_job_vacancies WHERE id = :id")->execute([':id' => $id]);
-        audit_log($pdo, (int)current_user()['id'], 'VACANCY_DELETE', 'care_jf_job_vacancies', $id, 'Job vacancy deleted');
-        flash_set('success', 'Job vacancy deleted.');
+        $historyStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_employment_records WHERE vacancy_id = :id");
+        $historyStmt->execute([':id' => $id]);
+        if ((int)$historyStmt->fetchColumn() > 0) {
+            flash_set('error', 'This vacancy has hire history linked to it and cannot be deleted. Disable it instead.');
+        } else {
+            $pdo->prepare("DELETE FROM care_jf_job_vacancies WHERE id = :id")->execute([':id' => $id]);
+            audit_log($pdo, (int)current_user()['id'], 'VACANCY_DELETE', 'care_jf_job_vacancies', $id, 'Job vacancy deleted');
+            flash_set('success', 'Job vacancy deleted.');
+        }
     }
     redirect('vacancies.php');
 }
