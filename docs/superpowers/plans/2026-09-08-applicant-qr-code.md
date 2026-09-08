@@ -60,6 +60,15 @@ for Alpine/Chart.js/FontAwesome.
   (an un-rebuilt CSS bundle shipping with missing classes); this plan
   builds the rebuild into each task that needs it instead of leaving it
   for a final-review catch.
+- **Never embed a bare `json_encode(...)` result inside a double-quoted
+  HTML attribute** (`x-init="..."`, `onclick="..."`, etc.) — `json_encode()`
+  of a string emits literal enclosing `"` characters, which prematurely
+  terminate the attribute and silently break it. Always wrap it in this
+  codebase's `e()` helper: `e(json_encode($value))`. (`json_encode()` is
+  still safe unwrapped inside an actual `<script>` body, e.g.
+  `dashboard.php`'s Chart.js data — the two contexts are different.)
+  Found in Task 3's review, corrected there and pre-corrected in Task
+  4's code below before it was ever dispatched.
 - **Script load order matters and is spelled out per-task below** —
   `header.php`'s vendored library `<script>` tags are not deferred (so
   they're guaranteed available before `footer.php`'s synchronous
@@ -693,9 +702,9 @@ Replace with:
     </div>
     <?php if ($applicantCode): ?>
     <div class="mt-4 flex flex-col items-center">
-      <canvas id="regQrCanvas" x-init="renderApplicantQr($el, <?= json_encode($applicantCode) ?>)"
+      <canvas id="regQrCanvas" x-init="renderApplicantQr($el, <?= e(json_encode($applicantCode)) ?>)"
               class="rounded-lg border border-slate-200"></canvas>
-      <button type="button" onclick="downloadQrPng(document.getElementById('regQrCanvas'), <?= json_encode($applicantCode . '-qr.png') ?>)"
+      <button type="button" onclick="downloadQrPng(document.getElementById('regQrCanvas'), <?= e(json_encode($applicantCode . '-qr.png')) ?>)"
               class="mt-2 text-xs font-medium text-brand-600 hover:text-brand-800">
         <i class="fa-solid fa-download mr-1"></i> Download QR
       </button>
