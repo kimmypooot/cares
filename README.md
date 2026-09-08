@@ -76,13 +76,15 @@ npm install
 npm run build          # rebuilds public/assets/css/app.build.css
 ```
 
-To refresh the vendored copies of Font Awesome / Alpine.js / Chart.js after
-`npm install`:
+To refresh the vendored copies of Font Awesome / Alpine.js / Chart.js /
+QR libraries after `npm install`:
 ```bash
 cp node_modules/@fortawesome/fontawesome-free/css/all.min.css public/assets/vendor/fontawesome/all.min.css
 cp -r node_modules/@fortawesome/fontawesome-free/webfonts public/assets/vendor/fontawesome/webfonts
 cp node_modules/alpinejs/dist/cdn.min.js public/assets/vendor/alpine/alpine.min.js
 cp node_modules/chart.js/dist/chart.umd.js public/assets/vendor/chart/chart.min.js
+cp node_modules/qrcode-generator/qrcode.js public/assets/vendor/qrcode-generator/qrcode.js
+cp node_modules/jsqr/dist/jsQR.js public/assets/vendor/jsqr/jsQR.js
 ```
 
 ## 5. Enable HTTPS in production
@@ -127,7 +129,7 @@ ini_set('session.cookie_secure', '1');
 │   ├── vacancies.php               Job Vacancies module (agency-scoped CRUD)
 │   ├── reports.php, users.php, audit-logs.php, settings.php
 │   ├── api/applicants.php         JSON endpoint for live search/pagination
-│   └── assets/                    Built CSS + vendored Font Awesome/Alpine/Chart.js
+│   └── assets/                    Built CSS + vendored Font Awesome/Alpine/Chart.js/QR libraries
 ├── resources/css/input.css        Tailwind source (compiled to public/assets/css/app.build.css)
 ├── tailwind.config.js
 └── package.json
