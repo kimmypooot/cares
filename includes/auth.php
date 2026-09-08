@@ -57,6 +57,21 @@ function is_logged_in(): bool
         return false;
     }
 
+    // The session's user must still exist and be Active — an account
+    // deleted or disabled after this session was created (e.g. by an
+    // Administrator, or by a data reset) must lose access immediately
+    // rather than linger until the idle timeout, and must never reach
+    // an audit_log() call whose user_id foreign key now points at
+    // nothing (care_jf_audit_logs.user_id references care_jf_users.id
+    // — see do_logout()'s own defensive check for the same reason).
+    $stmt = Database::getConnection()->prepare("SELECT status FROM care_jf_users WHERE id = :id");
+    $stmt->execute([':id' => $_SESSION['user_id']]);
+    if ($stmt->fetchColumn() !== 'Active') {
+        session_unset();
+        session_destroy();
+        return false;
+    }
+
     $_SESSION['last_activity'] = time();
     return true;
 }
@@ -236,7 +251,17 @@ function do_logout(PDO $pdo): void
 {
     $user = current_user();
     if ($user['id']) {
-        audit_log($pdo, (int)$user['id'], 'LOGOUT', 'care_jf_users', (int)$user['id'], 'User logged out');
+        // Defense in depth alongside is_logged_in()'s own existence
+        // check: logging out must never fail just because the audit
+        // trail couldn't record who did it (care_jf_audit_logs.user_id
+        // has a foreign key to care_jf_users.id — inserting against a
+        // since-deleted id throws, and a user must always be able to
+        // leave regardless).
+        try {
+            audit_log($pdo, (int)$user['id'], 'LOGOUT', 'care_jf_users', (int)$user['id'], 'User logged out');
+        } catch (Throwable $e) {
+            error_log('Logout audit_log failed (non-fatal): ' . $e->getMessage());
+        }
     }
     $_SESSION = [];
     session_destroy();
