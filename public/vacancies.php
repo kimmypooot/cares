@@ -115,9 +115,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         audit_log($pdo, (int)current_user()['id'], $action === 'enable' ? 'VACANCY_ENABLE' : 'VACANCY_DISABLE', 'care_jf_job_vacancies', $id, "Vacancy {$newStatus}");
         flash_set('success', "Vacancy {$newStatus}.");
     } elseif ($action === 'delete') {
-        if (!can_delete()) {
+        // Administrator can delete any vacancy; a Partner Agency can delete
+        // their own — already ownership-verified above ($ownerAgencyId check,
+        // lines 47-55), so reaching this branch as a Partner Agency already
+        // means the vacancy belongs to their own agency.
+        if (!can_delete() && !is_partner_agency()) {
             http_response_code(403);
-            die('<h2 style="font-family:sans-serif">403 — Only an Administrator can delete a job vacancy.</h2>');
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to delete this vacancy.</h2>');
         }
         $historyStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_employment_records WHERE vacancy_id = :id");
         $historyStmt->execute([':id' => $id]);
@@ -178,7 +182,7 @@ require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
-<div class="space-y-5" x-data="{ showCreate: false, editingId: null }">
+<div class="space-y-5" x-data="{ showCreate: false, editingId: null, deletingId: null, deletingPosition: '' }">
   <div class="flex items-center justify-between flex-wrap gap-3 print:hidden">
     <div>
       <h1 class="text-2xl font-bold text-slate-800">Job Vacancies</h1>
@@ -270,6 +274,25 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
   </div>
 
+  <!-- Delete confirmation modal: real modal, does not close on outside click -->
+  <div x-show="deletingId !== null" x-cloak
+       class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4"
+       @keydown.escape.window="deletingId = null">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+      <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-triangle-exclamation text-red-500 mr-1"></i> Delete Job Vacancy?</h3>
+      <p class="text-sm text-slate-600 mb-5">Are you sure you want to delete <strong x-text="deletingPosition"></strong>? This action may affect vacancy and application records.</p>
+      <form method="POST">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" :value="deletingId">
+        <div class="flex justify-end gap-2">
+          <button type="button" @click="deletingId = null" class="px-5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold">Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <?php if ($scopedAgencyId === null): ?>
   <!-- Print-only summary: grouped by agency. Hidden on screen, shown only when printing. -->
   <div class="hidden print:block">
@@ -349,13 +372,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
                   <i class="fa-solid <?= $v['status']==='Active' ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
                 </button>
               </form>
-              <?php if (can_delete()): ?>
-              <form method="POST" class="inline">
-                <?= csrf_field() ?>
-                <input type="hidden" name="id" value="<?= (int)$v['id'] ?>">
-                <input type="hidden" name="action" value="delete">
-                <button type="button" data-confirm-delete="<?= e($v['position']) ?>" class="text-slate-500 hover:text-red-600 px-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
-              </form>
+              <?php if (can_delete() || is_partner_agency()): ?>
+              <button type="button" @click="deletingId = <?= (int)$v['id'] ?>; deletingPosition = <?= e(json_encode($v['position'])) ?>" class="text-slate-500 hover:text-red-600 px-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
               <?php endif; ?>
             </td>
           </tr>
