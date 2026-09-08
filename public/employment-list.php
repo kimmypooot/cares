@@ -44,10 +44,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('success', "Employment record {$newStatus}.");
     } elseif ($action === 'delete') {
         require_role(['Administrator']);
-        $stmt = $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id");
-        $stmt->execute([':id' => $recordId]);
-        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
-        flash_set('success', 'Employment record deleted.');
+
+        // If this is a confirmed hire tied to a Job Vacancy, restore that
+        // vacancy's slot before deleting — otherwise it stays permanently
+        // short one opening it no longer actually has. Only Delete
+        // restores the slot (not Disable/Enable) — see applicant-view.php's
+        // delete_employment action for the same rule and its rationale.
+        $vacancyToRestore = null;
+        if ($existingStatus === 'Hired') {
+            $vacStmt = $pdo->prepare("SELECT vacancy_id FROM care_jf_employment_records WHERE id = :id");
+            $vacStmt->execute([':id' => $recordId]);
+            $vacancyToRestore = $vacStmt->fetchColumn();
+        }
+
+        $pdo->beginTransaction();
+        try {
+            if ($vacancyToRestore) {
+                $pdo->prepare(
+                    "UPDATE care_jf_job_vacancies SET vacant_count = vacant_count + 1, status = IF(status = 'Filled', 'Active', status) WHERE id = :id"
+                )->execute([':id' => $vacancyToRestore]);
+                audit_log($pdo, (int)current_user()['id'], 'VACANCY_RESTORE', 'care_jf_job_vacancies', (int)$vacancyToRestore,
+                    'Vacancy slot restored (hire record deleted)');
+            }
+            $stmt = $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id");
+            $stmt->execute([':id' => $recordId]);
+            audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
+            $pdo->commit();
+            flash_set('success', 'Employment record deleted.');
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Delete employment record failed: ' . $e->getMessage());
+            flash_set('error', 'Deleting this record failed due to a system error. Please try again.');
+        }
     }
     redirect('employment-list.php');
 }

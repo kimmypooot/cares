@@ -55,10 +55,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_employment') {
         require_role(['Administrator']);
         $recordId = (int)($_POST['record_id'] ?? 0);
-        $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid")
-            ->execute([':id' => $recordId, ':aid' => $id]);
-        audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
-        flash_set('success', 'Employment record deleted.');
+
+        // If this is a confirmed hire tied to a Job Vacancy, restore that
+        // vacancy's slot before deleting the record — otherwise the
+        // vacancy stays permanently short one opening it no longer
+        // actually has. Only Delete restores the slot (not Disable/
+        // Enable) — deleting is the rare, irreversible action; toggling
+        // a record's status was never guarded against double-booking
+        // either, before or after this phase.
+        $vacStmt = $pdo->prepare(
+            "SELECT vacancy_id FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid AND employment_status = 'Hired'"
+        );
+        $vacStmt->execute([':id' => $recordId, ':aid' => $id]);
+        $vacancyToRestore = $vacStmt->fetchColumn();
+
+        $pdo->beginTransaction();
+        try {
+            if ($vacancyToRestore) {
+                $pdo->prepare(
+                    "UPDATE care_jf_job_vacancies SET vacant_count = vacant_count + 1, status = IF(status = 'Filled', 'Active', status) WHERE id = :id"
+                )->execute([':id' => $vacancyToRestore]);
+                audit_log($pdo, (int)current_user()['id'], 'VACANCY_RESTORE', 'care_jf_job_vacancies', (int)$vacancyToRestore,
+                    'Vacancy slot restored (hire record deleted)');
+            }
+            $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid")
+                ->execute([':id' => $recordId, ':aid' => $id]);
+            audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
+            $pdo->commit();
+            flash_set('success', 'Employment record deleted.');
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Delete employment record failed: ' . $e->getMessage());
+            flash_set('error', 'Deleting this record failed due to a system error. Please try again.');
+        }
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'tag_for_review') {
         if (!can_manage_employment() && !is_partner_agency()) {
@@ -200,16 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([':vid' => $vacancyId, ':id' => $recordId]);
 
             // Auto-close every other agency's still-open tag on this applicant.
-            $superStmt = $pdo->prepare(
-                "SELECT id FROM care_jf_employment_records WHERE applicant_id = :aid AND employment_status = 'For Review' AND id != :rid"
-            );
-            $superStmt->execute([':aid' => $id, ':rid' => $recordId]);
-            foreach ($superStmt->fetchAll(PDO::FETCH_COLUMN) as $supersededId) {
-                $pdo->prepare("UPDATE care_jf_employment_records SET employment_status = 'Superseded' WHERE id = :id")
-                    ->execute([':id' => $supersededId]);
-                audit_log($pdo, (int)current_user()['id'], 'APPLICANT_REVIEW_SUPERSEDED', 'care_jf_employment_records', (int)$supersededId,
-                    "Superseded by another agency's confirmed hire");
-            }
+            supersede_other_reviews($pdo, $id, $recordId, (int)current_user()['id']);
 
             audit_log($pdo, (int)current_user()['id'], 'APPLICANT_HIRED', 'care_jf_employment_records', $recordId,
                 "Applicant {$applicant['applicant_code']} hired");

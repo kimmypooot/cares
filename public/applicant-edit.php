@@ -157,6 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':date' => $old['date_hired'], ':cls' => $old['employment_classification'], ':rid' => $currentEmployment['id'],
                     ]);
                     audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_employment_records', (int)$currentEmployment['id'], "Employment synced via Edit Applicant for {$applicant['applicant_code']}");
+                    supersede_other_reviews($pdo, $id, (int)$currentEmployment['id'], (int)current_user()['id']);
                 } else {
                     $newEmpStmt = $pdo->prepare(
                         "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
@@ -166,7 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':aid' => $id, ':agid' => $agencyId, ':agency' => $agencyName, ':addr' => $agencyAddress,
                         ':date' => $old['date_hired'], ':cls' => $old['employment_classification'],
                     ]);
-                    audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_employment_records', (int)$pdo->lastInsertId(), "Employment created via Edit Applicant for {$applicant['applicant_code']}");
+                    $newEmpId = (int)$pdo->lastInsertId();
+                    audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_employment_records', $newEmpId, "Employment created via Edit Applicant for {$applicant['applicant_code']}");
+                    supersede_other_reviews($pdo, $id, $newEmpId, (int)current_user()['id']);
                 }
             } elseif ($currentEmployment) {
                 // Switched to "Not Yet": un-mark current, but keep the row as history (non-destructive).

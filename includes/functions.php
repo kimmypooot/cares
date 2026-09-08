@@ -170,6 +170,27 @@ function audit_log(PDO $pdo, ?int $userId, string $action, string $table, ?int $
     ]);
 }
 
+/**
+ * Auto-closes every OTHER agency's still-open "For Review" tag on an
+ * applicant once a real hire is recorded — regardless of which path
+ * created it (Tag for Review's confirm_hired, the internal Employment
+ * module, or Edit Applicant's employment sync). Must be called inside
+ * the same transaction as the hire itself where one exists.
+ */
+function supersede_other_reviews(PDO $pdo, int $applicantId, int $winningRecordId, ?int $actorUserId): void
+{
+    $stmt = $pdo->prepare(
+        "SELECT id FROM care_jf_employment_records WHERE applicant_id = :aid AND employment_status = 'For Review' AND id != :rid"
+    );
+    $stmt->execute([':aid' => $applicantId, ':rid' => $winningRecordId]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $supersededId) {
+        $pdo->prepare("UPDATE care_jf_employment_records SET employment_status = 'Superseded' WHERE id = :id")
+            ->execute([':id' => $supersededId]);
+        audit_log($pdo, $actorUserId, 'APPLICANT_REVIEW_SUPERSEDED', 'care_jf_employment_records', (int)$supersededId,
+            'Superseded by another confirmed hire');
+    }
+}
+
 /** Determine an applicant's current employment status label + badge color.
  * A row only counts as "current" if is_current=1 AND status='Active' —
  * a disabled employment record does not make the applicant "Hired".

@@ -68,6 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $newId = (int)$pdo->lastInsertId();
             audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_employment_records', $newId, "Added employment record for applicant #$applicantId");
+            if ($isCurrent) {
+                // A new current hire — regardless of which of the three
+                // paths created it, close every other agency's still-open
+                // "For Review" tag on this applicant. See confirm_hired's
+                // identical call in applicant-view.php.
+                supersede_other_reviews($pdo, $applicantId, $newId, (int)current_user()['id']);
+            }
             flash_set('success', 'Employment record added successfully.');
         } elseif ($action === 'edit') {
             $recordId = (int)($_POST['record_id'] ?? 0);
@@ -93,6 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':date' => $dateHired, ':status' => $status, ':current' => $isCurrent, ':remarks' => $remarks ?: null, ':id' => $recordId,
             ]);
             audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_employment_records', $recordId, "Updated employment record for applicant #$applicantId");
+            if ($isCurrent) {
+                supersede_other_reviews($pdo, $applicantId, $recordId, (int)current_user()['id']);
+            }
             flash_set('success', 'Employment record updated successfully.');
         }
         redirect('applicant-view.php?id=' . $applicantId);
