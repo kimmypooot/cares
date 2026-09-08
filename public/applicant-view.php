@@ -168,12 +168,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
   </div>
 
   <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-6 flex items-center gap-4">
-    <canvas id="applicantQrCanvas" x-data x-init="renderApplicantQr($el, <?= json_encode($applicant['applicant_code']) ?>)"
+    <canvas id="applicantQrCanvas" x-data x-init="renderApplicantQr($el, <?= e(json_encode($applicant['applicant_code'])) ?>)"
             class="rounded-lg border border-slate-200 shrink-0"></canvas>
     <div>
       <p class="text-xs text-slate-500 uppercase tracking-wide">Applicant QR Code</p>
       <p class="text-xs text-slate-400 mb-2">Scan this code for a quick lookup, or present it when following up with the office.</p>
-      <button type="button" onclick="downloadQrPng(document.getElementById('applicantQrCanvas'), <?= json_encode($applicant['applicant_code'] . '-qr.png') ?>)"
+      <button type="button" onclick="downloadQrPng(document.getElementById('applicantQrCanvas'), <?= e(json_encode($applicant['applicant_code'] . '-qr.png')) ?>)"
               class="print:hidden px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium hover:bg-slate-50">
         <i class="fa-solid fa-download mr-1"></i> Download QR
       </button>
