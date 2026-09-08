@@ -113,19 +113,45 @@ function generate_employer_id(PDO $pdo): string
         $pdo->beginTransaction();
     }
     try {
-        $pdo->prepare(
-            "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('employer_id', :y, 1)
-             ON DUPLICATE KEY UPDATE last_value = last_value + 1"
-        )->execute([':y' => $year]);
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $pdo->prepare(
+                "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('employer_id', :y, 1)
+                 ON DUPLICATE KEY UPDATE last_value = last_value + 1"
+            )->execute([':y' => $year]);
 
-        $stmt = $pdo->prepare("SELECT last_value FROM care_jf_id_sequences WHERE sequence_name = 'employer_id' AND year_key = :y");
-        $stmt->execute([':y' => $year]);
-        $next = (int)$stmt->fetchColumn();
+            $stmt = $pdo->prepare("SELECT last_value FROM care_jf_id_sequences WHERE sequence_name = 'employer_id' AND year_key = :y");
+            $stmt->execute([':y' => $year]);
+            $next = (int)$stmt->fetchColumn();
+            $candidate = 'EMP-' . $year . '-' . str_pad((string)$next, 7, '0', STR_PAD_LEFT);
 
-        if ($ownTransaction) {
-            $pdo->commit();
+            // Defense in depth: if this counter ever falls out of sync
+            // with reality (its row lost/reset independently of the
+            // agencies that already consumed IDs from it -- observed once
+            // in real operation, root cause not fully traced), a
+            // generated candidate could collide with one already
+            // assigned. Detect that here, resync the counter to the true
+            // max in-use number for this year, and retry, instead of
+            // letting the caller's UPDATE fail on the UNIQUE constraint.
+            $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_partner_agencies WHERE employer_id = :eid");
+            $existsStmt->execute([':eid' => $candidate]);
+            if ((int)$existsStmt->fetchColumn() === 0) {
+                if ($ownTransaction) {
+                    $pdo->commit();
+                }
+                return $candidate;
+            }
+
+            $maxStmt = $pdo->prepare(
+                "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(employer_id, '-', -1) AS UNSIGNED)), 0)
+                 FROM care_jf_partner_agencies WHERE employer_id LIKE :pattern"
+            );
+            $maxStmt->execute([':pattern' => "EMP-{$year}-%"]);
+            $realMax = (int)$maxStmt->fetchColumn();
+            $pdo->prepare(
+                "UPDATE care_jf_id_sequences SET last_value = :v WHERE sequence_name = 'employer_id' AND year_key = :y"
+            )->execute([':v' => $realMax, ':y' => $year]);
         }
-        return 'EMP-' . $year . '-' . str_pad((string)$next, 7, '0', STR_PAD_LEFT);
+        throw new RuntimeException('Unable to generate a unique Employer ID after multiple attempts.');
     } catch (Throwable $e) {
         if ($ownTransaction) {
             $pdo->rollBack();
