@@ -33,9 +33,12 @@ if (is_partner_agency()) {
     require_once __DIR__ . '/../includes/header.php';
     require_once __DIR__ . '/../includes/sidebar.php';
     ?>
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-slate-800">My Agency</h1>
-      <p class="text-sm text-slate-500"><?= e($agency['agency_name']) ?></p>
+    <div class="mb-6 flex items-start justify-between flex-wrap gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800">My Agency</h1>
+        <p class="text-sm text-slate-500"><?= e($agency['agency_name']) ?></p>
+      </div>
+      <?php require __DIR__ . '/../includes/qr-scanner-modal.php'; ?>
     </div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <?php
@@ -145,6 +148,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     <a href="reports.php" class="inline-flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg">
       <i class="fa-solid fa-chart-column"></i> Generate Report
     </a>
+    <?php require __DIR__ . '/../includes/qr-scanner-modal.php'; ?>
   </div>
 </div>
 

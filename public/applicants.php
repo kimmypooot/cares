@@ -15,11 +15,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <h1 class="text-2xl font-bold text-slate-800">Registered Applicants</h1>
       <p class="text-sm text-slate-500">Search, filter, and manage all registered applicants.</p>
     </div>
-    <?php if (can_edit()): ?>
-    <a href="applicant-create.php" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
-      <i class="fa-solid fa-user-plus"></i> Register New Applicant
-    </a>
-    <?php endif; ?>
+    <div class="flex gap-2 flex-wrap">
+      <?php require __DIR__ . '/../includes/qr-scanner-modal.php'; ?>
+      <?php if (can_edit()): ?>
+      <a href="applicant-create.php" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
+        <i class="fa-solid fa-user-plus"></i> Register New Applicant
+      </a>
+      <?php endif; ?>
+    </div>
   </div>
 
   <!-- Filters -->
