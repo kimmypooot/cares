@@ -615,7 +615,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
           $current = null;
           foreach ($employmentRecords as $rec) { if ($rec['is_current'] && $rec['status'] === 'Active') { $current = $rec; break; } }
         ?>
-        <?php $hideCurrentRemarksFromOtherAgency = $current && is_partner_agency() && (int)($current['agency_id'] ?? 0) !== $myAgencyIdForCheck; ?>
+        <?php $hideCurrentRemarksFromOtherAgency = $current && $current['employment_status'] === 'Hired' && is_partner_agency() && (int)($current['agency_id'] ?? 0) !== $myAgencyIdForCheck; ?>
         <?php if ($current): ?>
           <dl class="mt-4 space-y-2 text-sm">
             <div><dt class="text-slate-500">Agency/Company</dt><dd class="font-medium text-slate-800"><?= e($current['agency_display_name']) ?></dd></div>

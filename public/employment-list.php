@@ -22,6 +22,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $recordId = (int)($_POST['record_id'] ?? 0);
 
+    // Tracking rows (For Review/Withdrawn/Superseded) are managed
+    // exclusively through applicant-view.php's Tag for Review / Confirm
+    // Hired / Withdraw actions — refuse to Enable/Disable/Delete one here,
+    // even via a crafted POST with a guessed record_id that bypassed the
+    // listing query's filter.
+    $stateStmt = $pdo->prepare("SELECT employment_status FROM care_jf_employment_records WHERE id = :id");
+    $stateStmt->execute([':id' => $recordId]);
+    $existingStatus = $stateStmt->fetchColumn();
+    if (in_array($existingStatus, ['For Review', 'Withdrawn', 'Superseded'], true)) {
+        flash_set('error', 'This record is part of an in-progress or closed application review and cannot be managed here.');
+        redirect('employment-list.php');
+    }
+
     if (in_array($action, ['enable', 'disable'], true)) {
         require_role(['Administrator', 'Employee']);
         $newStatus = $action === 'enable' ? 'Active' : 'Disabled';
