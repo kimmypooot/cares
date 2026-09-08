@@ -22,6 +22,8 @@ $flash = flash_get();
 <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
 <script defer src="assets/vendor/alpine/alpine.min.js"></script>
 <script src="assets/vendor/chart/chart.min.js"></script>
+<script src="assets/vendor/qrcode-generator/qrcode.js"></script>
+<script src="assets/vendor/jsqr/jsQR.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased" x-data="{ sidebarOpen: false }">
 
