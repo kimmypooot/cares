@@ -77,8 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            $pdo->prepare("UPDATE care_jf_users SET full_name = :f, status = :s, is_active = :ia WHERE id = :id")
-                ->execute([':f' => $fullName, ':s' => $status, ':ia' => $status === 'Active' ? 1 : 0, ':id' => $userId]);
+            $pdo->prepare("UPDATE care_jf_users SET full_name = :f WHERE id = :id")
+                ->execute([':f' => $fullName, ':id' => $userId]);
+            set_user_status($pdo, $userId, $status);
             audit_log($pdo, $currentUserId, 'AGENCY_USER_UPDATE', 'care_jf_users', $userId, "Updated agency user #$userId (status: $status)");
             flash_set('success', 'User updated successfully.');
         } else {
@@ -98,8 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Cannot disable the only active user for your agency.');
         } else {
             $newStatus = $target['status'] === 'Active' ? 'Disabled' : 'Active';
-            $pdo->prepare("UPDATE care_jf_users SET status = :s, is_active = :ia WHERE id = :id")
-                ->execute([':s' => $newStatus, ':ia' => $newStatus === 'Active' ? 1 : 0, ':id' => $userId]);
+            set_user_status($pdo, $userId, $newStatus);
             audit_log($pdo, $currentUserId, $newStatus === 'Active' ? 'AGENCY_USER_ENABLE' : 'AGENCY_USER_DISABLE', 'care_jf_users', $userId, "Agency user $newStatus");
             flash_set('success', "User $newStatus.");
         }

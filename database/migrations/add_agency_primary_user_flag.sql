@@ -14,7 +14,7 @@
 USE care_job_fair_db;
 
 ALTER TABLE care_jf_users
-  ADD COLUMN is_primary TINYINT(1) NOT NULL DEFAULT 0 AFTER agency_id;
+  ADD COLUMN IF NOT EXISTS is_primary TINYINT(1) NOT NULL DEFAULT 0 AFTER agency_id;
 
 -- Every existing Partner Agency account today is, by definition, the
 -- original/only account for its agency.
