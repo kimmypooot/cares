@@ -133,7 +133,7 @@ require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
-<div class="space-y-5" x-data="{ showAdd: false, editingId: null, resettingId: null }">
+<div class="space-y-5" x-data="{ showAdd: <?= $errors ? 'true' : 'false' ?>, editingId: null, resettingId: null }">
   <div class="flex items-center justify-between flex-wrap gap-3">
     <div>
       <h1 class="text-2xl font-bold text-slate-800">Agency Users</h1>
@@ -159,12 +159,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="sm:col-span-2">
             <label class="block text-sm font-medium text-slate-700 mb-1">Full Name <span class="text-red-500">*</span></label>
-            <input type="text" name="full_name" required class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <input type="text" name="full_name" required value="<?= e($_POST['full_name'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <p class="text-xs text-red-500 mt-1 <?= empty($errors['full_name']) ? 'hidden' : '' ?>" data-error-for="full_name"><?= e($errors['full_name'] ?? '') ?></p>
           </div>
           <div class="sm:col-span-2">
             <label class="block text-sm font-medium text-slate-700 mb-1">Username <span class="text-red-500">*</span></label>
-            <input type="text" name="username" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <input type="text" name="username" required value="<?= e($_POST['username'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <p class="text-xs text-red-500 mt-1 <?= empty($errors['username']) ? 'hidden' : '' ?>" data-error-for="username"><?= e($errors['username'] ?? '') ?></p>
           </div>
           <div>
@@ -180,8 +180,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <div class="sm:col-span-2">
             <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
             <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="Active">Active</option>
-              <option value="Disabled">Disabled</option>
+              <option value="Active" <?= ($_POST['status'] ?? 'Active') === 'Active' ? 'selected' : '' ?>>Active</option>
+              <option value="Disabled" <?= ($_POST['status'] ?? '') === 'Disabled' ? 'selected' : '' ?>>Disabled</option>
             </select>
           </div>
         </div>
