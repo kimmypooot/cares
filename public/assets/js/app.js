@@ -154,6 +154,7 @@ function qrScanner() {
     cameraError: '',
     _stream: null,
     _rafId: null,
+    _generation: 0,
 
     openModal() {
       this.open = true;
@@ -176,16 +177,43 @@ function qrScanner() {
     async startCamera() {
       if (!this.cameraAvailable) return;
       this.cameraError = '';
+      const generation = ++this._generation;
+      let stream;
       try {
-        this._stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      } catch (err) {
+        if (generation === this._generation) {
+          this.cameraError = 'Camera access was denied or unavailable. Use manual entry below.';
+          this.cameraActive = false;
+        }
+        return;
+      }
+      if (generation !== this._generation) {
+        // The modal was closed (or a newer startCamera() call superseded this
+        // one) while getUserMedia() was pending. Release the just-acquired
+        // camera immediately instead of leaving it running unseen.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this._stream = stream;
+      try {
         const video = this.$refs.qrVideo;
         video.srcObject = this._stream;
         await video.play();
+        if (generation !== this._generation) {
+          this._stream.getTracks().forEach((track) => track.stop());
+          this._stream = null;
+          return;
+        }
         this.cameraActive = true;
         this._scanLoop();
       } catch (err) {
         this.cameraError = 'Camera access was denied or unavailable. Use manual entry below.';
         this.cameraActive = false;
+        if (this._stream) {
+          this._stream.getTracks().forEach((track) => track.stop());
+          this._stream = null;
+        }
       }
     },
     _scanLoop() {
@@ -208,6 +236,7 @@ function qrScanner() {
       this._rafId = requestAnimationFrame(() => this._scanLoop());
     },
     stopCamera() {
+      this._generation++;
       this.cameraActive = false;
       if (this._rafId) {
         cancelAnimationFrame(this._rafId);
