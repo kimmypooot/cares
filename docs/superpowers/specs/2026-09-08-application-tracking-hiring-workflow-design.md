@@ -28,224 +28,291 @@ and Manage Users updates that come with it.
   also tagged the same person. Administrator/Employee see every
   agency's tags, for oversight.
 - **Remarks are private per agency**: an agency (or staff acting on
-  its behalf) can write/edit a remark on their own review row at any
-  time. It is never shared with other agencies — it lives on the new
-  tracking row, not on the applicant's shared profile `remarks` field.
+  its behalf) can write/edit a remark on their own tag at any time. It
+  is never shared with other agencies.
 - **Hired applicants disappear from other agencies' pool**: once an
-  applicant is hired (by *any* means — this reuses the system's one
-  existing definition of "hired," `is_applicant_hired()`, not a new
-  parallel one scoped just to this workflow), every Partner Agency
-  other than the hiring one stops seeing that applicant in their
-  applicants list. The hiring agency keeps seeing their own hire.
-  Administrator/Employee are unaffected — they always see everyone.
+  applicant is hired (reusing the system's one existing definition of
+  "hired," `is_applicant_hired()`), every Partner Agency other than
+  the hiring one stops seeing that applicant in their applicants list.
+  The hiring agency keeps seeing their own hire. Administrator/Employee
+  are unaffected — they always see everyone.
 - **Dashboard stats are out of scope for this phase**: the Partner
-  Agency dashboard's summary cards are left as-is. "Available for
-  Recruitment" already excludes every hired applicant regardless of
-  agency, so it's unaffected by the new visibility rule; "Total
-  Registered Applicants" keeps showing the true system-wide total
-  rather than a per-agency-filtered count.
+  Agency dashboard's summary cards are left as-is (see original
+  reasoning in §11) — except for one specific, unrelated correctness
+  fix to the hires-per-month chart query, §7.
+- **Tagging "For Review" immediately shows up in the applicant's
+  Employment History** — this is a revision made after reviewing the
+  first draft of this spec. The agency's tag is not a side record in a
+  separate area; it *is* an Employment History entry from the moment
+  it's created (just not yet a confirmed one). This reshapes §3-§5
+  below relative to the first draft: there is no separate tracking
+  table — the existing `care_jf_employment_records` table is extended
+  instead.
 
 ## 3. Database changes
 
 New migration `database/migrations/add_application_tracking_and_hiring_workflow.sql`
-(additive only — the established convention of never editing an
-already-shipped migration continues to apply):
+(additive only). **No new table.** `care_jf_employment_records`'s
+actual current schema (confirmed by reading the live database, not
+assumed) is:
 
-**New table `care_jf_applicant_agency_reviews`**
 ```sql
-CREATE TABLE care_jf_applicant_agency_reviews (
-  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  applicant_id INT UNSIGNED NOT NULL,
-  agency_id    INT UNSIGNED NOT NULL,
-  vacancy_id   INT UNSIGNED NULL,
-  status       ENUM('For Review','Hired','Withdrawn','Superseded') NOT NULL DEFAULT 'For Review',
-  remarks      TEXT NULL,
-  tagged_by    INT UNSIGNED NOT NULL,
-  tagged_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  resolved_at  TIMESTAMP NULL,
-  CONSTRAINT fk_review_applicant FOREIGN KEY (applicant_id) REFERENCES care_jf_applicants(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_review_agency    FOREIGN KEY (agency_id)    REFERENCES care_jf_partner_agencies(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_review_vacancy   FOREIGN KEY (vacancy_id)   REFERENCES care_jf_job_vacancies(id) ON DELETE RESTRICT,
-  INDEX idx_review_applicant (applicant_id),
-  INDEX idx_review_agency (agency_id),
-  INDEX idx_review_status (status)
+CREATE TABLE `care_jf_employment_records` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `applicant_id` int(10) unsigned NOT NULL,
+  `agency_id` int(10) unsigned DEFAULT NULL,
+  `agency_company_name` varchar(200) NOT NULL,
+  `agency_company_address` varchar(255) NOT NULL,
+  `date_hired` date NOT NULL,
+  `employment_status` enum('Job Order','Temporary','COS','Permanent','Casual','Other','Hired') NOT NULL,
+  `is_current` tinyint(1) NOT NULL DEFAULT 1,
+  `status` enum('Active','Disabled') NOT NULL DEFAULT 'Active',
+  `remarks` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  ...
+  CONSTRAINT `fk_employment_agency` FOREIGN KEY (`agency_id`) REFERENCES `care_jf_partner_agencies` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_employment_applicant` FOREIGN KEY (`applicant_id`) REFERENCES `care_jf_applicants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 ```
-`tagged_by` deliberately has no FK constraint (matching how this
-codebase's audit trail already treats the acting user id) so a row
-never becomes orphaned/unreadable if a user account is later disabled.
 
-There is no database-level uniqueness constraint preventing two open
-`For Review` rows for the same `(applicant_id, agency_id)` pair — MySQL
-has no partial/filtered unique index, and a real "re-tag after
-withdrawing" case must remain possible. This is enforced in
-application code instead: before inserting a new `For Review` row,
-check no existing `For Review` row already exists for that pair.
+Three changes:
 
-**`care_jf_employment_records` gains one column**
 ```sql
+ALTER TABLE care_jf_employment_records
+  MODIFY COLUMN employment_status ENUM(
+    'Job Order','Temporary','COS','Permanent','Casual','Other','Hired',
+    'For Review','Withdrawn','Superseded'
+  ) NOT NULL;
+
+ALTER TABLE care_jf_employment_records
+  MODIFY COLUMN date_hired DATE NULL;
+
 ALTER TABLE care_jf_employment_records
   ADD COLUMN vacancy_id INT UNSIGNED NULL AFTER agency_id,
   ADD CONSTRAINT fk_employment_vacancy FOREIGN KEY (vacancy_id) REFERENCES care_jf_job_vacancies(id) ON DELETE RESTRICT;
 ```
-Nullable and only ever populated by the new "Confirm Hired" flow — the
-existing, unrelated internal Employment module (`employment-form.php`,
-used by Administrator/Employee to record Job Order/Temporary/COS/
-Permanent/Casual/Other classifications directly) keeps writing `NULL`
-here, untouched by this phase.
+
+- `remarks` already exists — reused as-is, no change. It's already
+  displayed in the Employment History table today.
+- `date_hired` becomes nullable because a `For Review` row has no hire
+  date yet — it's populated only at the moment a row transitions to
+  `Hired`. The internal Employment module (`employment-form.php`)
+  keeps requiring/setting a real date for its own record types
+  (Job Order/Temporary/COS/Permanent/Casual/Other) — nothing there
+  changes; nullability is additive.
+- No `tagged_by`/actor-id column is added — this codebase's existing
+  `audit_log()` trail already answers "who did this and when" for
+  every state transition (see §4), matching how other tables in this
+  codebase (e.g. `care_jf_job_vacancies`) don't store a
+  created-by column either.
+- `vacancy_id` is the same nullable, `ON DELETE RESTRICT` column
+  planned in the first draft — unchanged, just living on the table
+  that now also hosts the tracking rows instead of a second table.
 
 ## 4. Workflow
 
+One `care_jf_employment_records` row represents one Partner Agency's
+relationship with one applicant, progressing through states via
+`employment_status`. **The row is inserted once, at "Tag for Review,"
+and updated in place as it progresses** — Confirm Hired and Withdraw
+are `UPDATE`s to that same row, not new inserts. This means a Partner
+Agency's tag is visible in Employment History from the moment it's
+created, exactly as requested.
+
 **Tag for Review** — available to a Partner Agency (their own agency,
-always server-derived via `current_agency_id($pdo)`, never a posted
-value) or to Administrator/Employee (choosing an agency from the same
+always server-derived via `current_agency_id($pdo)`) or to
+Administrator/Employee (choosing an agency from the same
 `active_agencies()` dropdown the old Mark-as-Hired form already used).
-Inserts a `For Review` row. No employment record is created, no
-vacancy is touched, and the applicant's derived employment status is
-completely unaffected — they remain "For Further Review" everywhere
-else in the system exactly as before this phase existed.
+Before inserting, check no existing row for this
+`(applicant_id, agency_id)` pair already has `employment_status =
+'For Review'` — if one does, block (no duplicate concurrent tags from
+the same agency; re-tagging is fine once a prior tag has moved to
+`Withdrawn`/`Superseded`/`Hired`, since none of those match the check).
+Insert:
+```
+agency_id            = <resolved agency>
+agency_company_name  = <that agency's current name, snapshotted>
+agency_company_address = <that agency's current address, snapshotted>
+date_hired            = NULL
+employment_status      = 'For Review'
+is_current              = 0
+status                  = 'Active'
+```
+`is_current = 0` is what keeps this row invisible to
+`is_applicant_hired()`/`current_employment_status()` (both filter
+`is_current = 1 AND status = 'Active'`) — nothing else in the system
+(dashboard counts, the "hide once hired" rule in §6, reports) is
+affected by a mere tag. Audit action `APPLICANT_TAGGED_FOR_REVIEW`.
 
-**Confirm Hired** — only offered for an agency that already has an
-open (`status = 'For Review'`) row on this applicant. Requires
-selecting one of that agency's Active vacancies with
-`vacant_count > 0`. On confirm, in one DB transaction:
-1. Insert into `care_jf_employment_records` — same shape as the
-   retired one-click flow's insert (`employment_status = 'Hired'`,
-   `is_current = 1`, `status = 'Active'`, `agency_id`,
-   `agency_company_name`/`agency_company_address` copied from the
-   agency row), now also setting the new `vacancy_id`.
-2. Decrement the selected vacancy's `vacant_count` by 1; if it reaches
+**Confirm Hired** — only offered for a row this agency already has in
+`For Review` status on this applicant. Requires selecting one of that
+agency's Active vacancies with `vacant_count > 0`. Guarded, same as
+the retired one-click flow was, against a double-hire: block if the
+applicant already has any other `is_current = 1 AND status = 'Active'`
+row. In one DB transaction:
+1. Clear `is_current` on every other row for this applicant first
+   (this codebase's standing bookkeeping rule for this column — see
+   CLAUDE.md).
+2. `UPDATE` this row: `employment_status = 'Hired'`, `is_current = 1`,
+   `date_hired = CURDATE()`, `vacancy_id = <selected>`.
+3. Decrement the selected vacancy's `vacant_count` by 1; if it reaches
    0, set the vacancy's `status` to `Filled`.
-3. Update this review row: `status = 'Hired'`, `vacancy_id` set,
-   `resolved_at = NOW()`.
-4. For every *other* open (`For Review`) row on the same applicant
-   (from other agencies): `status = 'Superseded'`,
-   `resolved_at = NOW()`. One `audit_log()` call per superseded row
-   (`APPLICANT_REVIEW_SUPERSEDED`), matching this codebase's
-   one-entry-per-state-change audit convention.
-5. `audit_log()` for the hire itself (`APPLICANT_HIRED`) and for the
-   vacancy decrement (`VACANCY_DECREMENT`, record id = the vacancy).
+4. For every *other* row on the same applicant still in `For Review`
+   (from other agencies): `UPDATE ... SET employment_status =
+   'Superseded'`. One `audit_log()` call per superseded row.
+5. `audit_log()` for the hire itself (`APPLICANT_HIRED`) and the
+   vacancy decrement (`VACANCY_DECREMENT`).
 
-A failure at any step rolls back the whole transaction — an applicant
-can never end up "Hired" with no vacancy decremented, or a vacancy
-decremented with no employment record, matching the transactional
-discipline `generate_employer_id()`/`activate_agency` already
-established in Phase 1.
+A failure at any step rolls back the whole transaction.
 
 **Withdraw** — an agency (or staff on its behalf) can release their
-own open `For Review` row without hiring: `status = 'Withdrawn'`,
-`resolved_at = NOW()`. Audit action `APPLICANT_REVIEW_WITHDRAWN`.
+own `For Review` row: `UPDATE ... SET employment_status =
+'Withdrawn'`. Audit action `APPLICANT_REVIEW_WITHDRAWN`. A withdrawn
+row is not reused by a later re-tag — a fresh "Tag for Review" inserts
+a new row, preserving the full history of every episode of interest
+this agency ever had in this applicant.
 
 **Remarks** — the tagging agency (or staff acting on that agency's
-row) can write/update `remarks` on their own row at any time while it
-exists (`For Review` or `Hired` — not after `Withdrawn`/`Superseded`,
-since there is no ongoing relationship left to annotate). Audit action
+row) can write/update the row's existing `remarks` column at any time
+while it's `For Review` or `Hired` (not after `Withdrawn`/`Superseded`
+— no ongoing relationship left to annotate). Audit action
 `APPLICANT_REVIEW_REMARKS_UPDATED`.
 
-## 5. UI: `applicant-view.php`'s "Agency Interest" section
+## 5. UI: `applicant-view.php`'s Employment History section
 
-Replaces the retired single "Mark as Hired" button + confirmation
-modal (both removed from this page). A role-scoped section, in the
-same sidebar-card position the old Employment Status card occupied:
+**No new section.** The existing Employment History table gains new
+row states, styled distinctly, and its query/actions become
+role-scoped:
 
-- **Partner Agency**: sees only their own row for this applicant,
-  queried with `WHERE agency_id = current_agency_id($pdo)` — the same
-  IDOR-safe pattern used everywhere else in this codebase. Three
-  possible states rendered:
-  - No row exists → a "Tag for Review" button.
-  - Row exists, `status = 'For Review'` → status badge, a remarks
-    textarea (editable, "Save Remarks" button), a "Confirm Hired"
-    button (opens the vacancy-selection modal) and a "Withdraw"
-    button.
-  - Row exists, any other status → status badge + (if `Hired`) the
-    vacancy/hire details, read-only remarks if present. No further
-    action available.
-- **Administrator/Employee**: sees a small table of every agency that
-  has ever tagged this applicant (every status, for oversight), plus
-  a "Tag New Agency for Review" control (an `active_agencies()`
-  dropdown, excluding agencies that already have an open row). Can act
-  on any row (Confirm Hired / Withdraw) on behalf of that agency,
-  exactly as they could previously act on behalf of any agency in the
-  old Mark-as-Hired dropdown.
+- **Query, role-scoped**: Administrator/Employee see every row for
+  this applicant, exactly as today (this includes every agency's
+  `For Review`/`Withdrawn`/`Superseded` rows, for oversight). A
+  Partner Agency session adds a filter: every row whose
+  `employment_status` is one of `For Review`/`Withdrawn`/`Superseded`
+  is hidden **unless** its `agency_id` matches their own — so they
+  still see every confirmed/historical employment record exactly as
+  before (nothing about that visibility changes), but only their own
+  in-flight tags, never another agency's.
+- **Ordering**: switches from `ORDER BY date_hired DESC, id DESC` to
+  `ORDER BY created_at DESC, id DESC` — `date_hired` is now nullable
+  for `For Review` rows, so it's no longer a reliable global sort key.
+- **Display**: a `For Review`/`Withdrawn`/`Superseded` row shows a
+  distinct badge (matching this table's existing badge pattern) and
+  "—" (or "Pending") where `format_date($rec['date_hired'])` would
+  otherwise print an empty string for a null date.
+- **Actions per row**: the existing generic Enable/Disable/Delete
+  actions (Administrator-only, via `enable_employment`/
+  `disable_employment`/`delete_employment`) continue to apply only to
+  genuinely confirmed records exactly as today — untouched by this
+  phase. `For Review` rows instead get **Confirm Hired** (opens the
+  vacancy-selection modal) and **Withdraw**, visible to the owning
+  Partner Agency or to Administrator/Employee acting on that agency's
+  behalf. `Withdrawn`/`Superseded` rows are read-only history, no
+  actions.
+- **Tag for Review trigger**: a button near the Employment History
+  section header — for a Partner Agency, tags their own agency
+  directly; for Administrator/Employee, opens an `active_agencies()`
+  dropdown (excluding agencies that already have an open `For Review`
+  row on this applicant) to tag on behalf of a chosen agency.
+- A remarks field (textarea + "Save Remarks") is shown inline on a
+  `For Review`/`Hired` row the viewer is allowed to edit (their own
+  agency's row, or staff acting on that agency's behalf).
 
 ## 6. Applicants list visibility (`public/api/applicants.php`)
 
-For a Partner Agency session only (Administrator/Employee/Viewer
-unaffected), the query gains a filter: an applicant is excluded once
-`is_applicant_hired()` is true for them, **unless** the current active
-employment record's `agency_id` equals the viewing agency's own id.
-This reuses the query's existing `LEFT JOIN` against
-`care_jf_employment_records` (already there for the `employment_status`
-column) — no new join needed, just an additional condition alongside
-the existing `is_deleted = 0` filter, scoped behind
-`is_partner_agency()`.
+Unchanged from the first draft — this was never dependent on which
+table backs the tracking, only on `is_applicant_hired()`, which
+remains correct because `For Review`/`Withdrawn`/`Superseded` rows
+never set `is_current = 1`. For a Partner Agency session, an applicant
+is excluded once hired **unless** the current active record's
+`agency_id` equals the viewing agency's own id.
 
-## 7. `vacancies.php` delete guard
+## 7. `public/dashboard.php` — one query needs an `is_current` guard
 
-The delete action's comment already anticipated this
-(`employment_records has no vacancy_id column until Phase 3`). Add the
-dependency check the comment describes, mirroring
-`partner-agency.php`'s existing employment-history guard:
-`SELECT COUNT(*) FROM care_jf_employment_records WHERE vacancy_id = :id`
-— if greater than 0, block the delete with a message directing the
-Administrator to disable the vacancy instead.
+Audited every `care_jf_employment_records` query in `dashboard.php`
+and `reports.php` for the assumption "every row here is a confirmed
+hire," now that `For Review`/`Withdrawn`/`Superseded` rows exist
+alongside real ones. `reports.php`'s one join already filters
+`is_current = 1 AND status = 'Active'`, so it's unaffected by
+construction — a `For Review`/etc. row never matches (it's always
+`is_current = 0` until promoted to `Hired`). Every query in
+`dashboard.php` has the same guard **except one**: the "Applicants
+Hired Per Month" chart data,
+```sql
+SELECT DATE_FORMAT(date_hired, '%Y-%m') AS ym, COUNT(*) AS total
+FROM care_jf_employment_records WHERE status = 'Active'
+GROUP BY ym ORDER BY ym DESC LIMIT 6
+```
+Without an `is_current = 1` filter, this would now also count
+`For Review` rows (`status = 'Active'` but not yet a real hire,
+`date_hired = NULL`), corrupting the chart with a spurious NULL-month
+bucket. Fix: add `AND is_current = 1` to the `WHERE` clause, matching
+every sibling query in this same file exactly. This is the one
+required code change from this audit; noted here as its own numbered
+item (not folded into "testing will catch it") because it's a fix, not
+a test.
 
-## 8. Manage Users: Partner Agency password reset
+## 8. `vacancies.php` delete guard
 
-`users.php`'s Partner Agency Accounts tab currently has Activate/
-Disable/Re-enable/Delete but genuinely no password-reset action
-(confirmed by reading the current file — only the separate System
-Users tab has one). Add a reset-password row action for Partner Agency
-accounts, reusing the existing `reset_password` POST action already
-implemented generically in this file (it operates on any
-`care_jf_users` row by `user_id`, so no backend change is needed —
-this is a UI-only addition mirroring the System Users tab's existing
-key-icon/inline-form pattern).
+Unchanged from the first draft: `SELECT COUNT(*) FROM
+care_jf_employment_records WHERE vacancy_id = :id` blocks deletion of
+a vacancy with hire history.
 
-## 9. Security
+## 9. Manage Users: Partner Agency password reset
+
+Unchanged from the first draft — add a reset-password row action to
+the Partner Agency Accounts tab, reusing the existing generic
+`reset_password` POST action.
+
+## 10. Security
 
 - Every mutation re-derives `agency_id` server-side for a Partner
-  Agency session — never trusted from a posted value, identical
-  discipline to every prior phase.
-- Administrator/Employee's chosen agency (Tag for Review, Confirm
-  Hired, Withdraw, or Remarks acting on an agency's behalf) is
-  validated against `active_agencies()` before use.
+  Agency session — never trusted from a posted value.
+- Administrator/Employee's chosen agency is validated against
+  `active_agencies()` before use.
+- Every action targeting an *existing* row (Confirm Hired, Withdraw,
+  Remarks) re-resolves that row's true `agency_id` from the database
+  first and 403s a Partner Agency session whose own agency doesn't
+  match — the same DB-resolved-ownership pattern
+  `vacancies.php`/`applicant-view.php`'s other POST handlers already
+  use, now applied to `employment_records` rows in the new states.
 - The Hire confirmation's vacancy selection is re-validated
   server-side against that specific agency's own vacancies with
-  `status = 'Active' AND vacant_count > 0` — a Partner Agency can never
-  decrement another agency's vacancy, and a stale/already-filled
-  vacancy id is rejected rather than trusted from the form.
-- The hire transaction (insert employment record, decrement vacancy,
-  update review row, supersede competing rows) is atomic — see §4.
+  `status = 'Active' AND vacant_count > 0`.
+- The hire transaction (clear other `is_current`, update the row,
+  decrement vacancy, supersede competing rows) is atomic.
 - Every new POST action re-checks role/ownership server-side inside
-  its own handler, in addition to the page's top-of-file gate — this
-  codebase's standing double-enforcement convention.
+  its own handler, in addition to the page's top-of-file gate.
 - `e()` escaping on all new dynamic output, including remarks text.
+- The Employment History query's Partner-Agency filter (§5) is the
+  sole mechanism enforcing cross-agency privacy — it is covered
+  explicitly in testing (§12) since a mistake there leaks exactly the
+  information this phase was asked to keep private.
 
-## 10. Out of scope for Phase 3
+## 11. Out of scope for Phase 3
 
 Recalculating the Partner Agency dashboard's summary cards for the new
-visibility rule (§2); any change to the unrelated internal Employment
+visibility rule; any change to the unrelated internal Employment
 module (`employment-form.php`'s Job Order/Temporary/COS/Permanent/
-Casual/Other flow); new report types beyond what already exists in
-`reports.php` — this phase does not add new reports, only keeps the
-existing ones correct against the new schema (an applicant who is
-"For Review" but not yet hired still reports as "For Further Review,"
-unchanged).
+Casual/Other flow, or the existing Enable/Disable/Delete actions on
+confirmed records); new report types beyond keeping the existing ones
+correct against the extended schema.
 
-## 11. Testing
+## 12. Testing
 
-No automated test suite in this repo (CLAUDE.md convention) — same
-`php -l` + MySQL CLI + curl-driven HTTP checks as Phases 1 and 2,
-including: the full tag → hire transaction verified atomic (vacancy
-decrement, employment record, review-row update, and supersession of
-competing agencies' rows all land together or none do); the
-cross-agency privacy rule (Agency B's session genuinely cannot see
-that Agency A tagged the same applicant, via both the profile page and
-any API response); the post-hire visibility rule (a hired applicant
+No automated test suite in this repo — same `php -l` + MySQL CLI +
+curl-driven HTTP checks as Phases 1 and 2, including: the full tag →
+hire transaction verified atomic; **the cross-agency privacy filter
+specifically** — Agency B's session genuinely cannot see that Agency A
+tagged the same applicant, verified by reading Agency B's rendered
+Employment History HTML and confirming Agency A's row is absent, not
+just hidden by CSS; the post-hire visibility rule (a hired applicant
 disappears from every other agency's `applicants.php`/API results
 while remaining visible to the hiring agency and to
-Administrator/Employee); the vacancy-delete guard now blocking
-deletion of a vacancy with hire history; and the Partner Agency
-password-reset action working end-to-end via the already-existing
-`reset_password` handler.
+Administrator/Employee); a `For Review` row's `date_hired = NULL`
+correctly renders as "—" and is excluded from any month-bucketed
+report/chart query that groups by `date_hired` (e.g. the dashboard's
+existing hires-per-month chart) so it doesn't silently corrupt those
+counts; the vacancy-delete guard blocking deletion of a vacancy with
+hire history; the Partner Agency password-reset action.
