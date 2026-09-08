@@ -195,6 +195,22 @@ function is_last_active_admin(PDO $pdo, int $userId): bool
     return $count <= 1;
 }
 
+/** Safeguard: prevent removing/disabling the last remaining active user of a Partner Agency. */
+function is_last_active_agency_user(PDO $pdo, int $userId): bool
+{
+    $stmt = $pdo->prepare("SELECT agency_id, status FROM care_jf_users WHERE id = :id AND role = 'Partner Agency'");
+    $stmt->execute([':id' => $userId]);
+    $target = $stmt->fetch();
+    if (!$target || $target['status'] !== 'Active' || !$target['agency_id']) {
+        return false;
+    }
+    $countStmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM care_jf_users WHERE agency_id = :aid AND role = 'Partner Agency' AND status = 'Active'"
+    );
+    $countStmt->execute([':aid' => $target['agency_id']]);
+    return (int)$countStmt->fetchColumn() <= 1;
+}
+
 /**
  * Attempt to authenticate a user. Returns true on success.
  * Applies a simple rate limit via session to slow brute-force attempts.
