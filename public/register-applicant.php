@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script defer src="assets/vendor/alpine/alpine.min.js"></script>
 <script src="assets/vendor/qrcode-generator/qrcode.js"></script>
 </head>
-<body class="min-h-screen" style="background: radial-gradient(circle at top, #1e2a5e 0%, #0f172a 70%); background-repeat: no-repeat; background-attachment: fixed; background-size: cover;" x-data="{ showSuccess: <?= $success ? 'true' : 'false' ?>, showPrivacy: <?= (!empty($errors) || $success) ? 'false' : 'true' ?> }">
+<body class="min-h-screen" style="background: radial-gradient(circle at top, #1e2a5e 0%, #0f172a 70%); background-repeat: no-repeat; background-attachment: fixed; background-size: cover;" x-data="{ showSuccess: <?= $success ? 'true' : 'false' ?>, showPrivacy: <?= (!empty($errors) || $success) ? 'false' : 'true' ?>, showPhotoNotice: false }">
 
 <?php if ($success): ?>
 <!-- Success popup: shown as an overlay on top of the (blank, ready-to-fill) form, instead of pushing page content down. -->
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <?php endif; ?>
     <p class="text-xs text-slate-500 mt-3">Please keep this ID for your reference. You may present it when following up with the office.</p>
-    <button @click="showSuccess = false; showPrivacy = true" class="mt-5 w-full px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
+    <button @click="showSuccess = false; showPrivacy = true; showPhotoNotice = false" class="mt-5 w-full px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
       Register Another Applicant
     </button>
   </div>
@@ -184,17 +184,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!-- Privacy Notice popup: mandatory read-through before every registration
      attempt (fresh visits and "Register Another Applicant"). No close/X
      button or click-outside dismiss — "Proceed" is the only way through,
-     since this is a required consent step, not just an FYI message. -->
+     since this is a required consent step, not just an FYI message.
+     Step 1 of 2 — proceeding here opens the Photo/Video Recording notice
+     (below) before the registration form itself becomes visible.
+     No x-transition here: "Register Another Applicant" hides the
+     success popup (which keeps its own x-transition) and reveals this
+     modal in the same click handler, and pairing x-transition on both
+     sides of that same-tick swap leaves this one stuck at
+     display:none (confirmed via live testing with real mouse clicks).
+     x-cloak is kept, since this modal can be the very first thing
+     visible on a fresh page load and still needs flash protection. -->
 <div x-show="showPrivacy" x-cloak
-     x-transition.opacity
      class="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
     <img src="assets/images/privacy-notice.jpg" alt="Civil Service Commission Privacy Notice" class="w-full h-auto block">
     <div class="p-6 sm:p-8 pt-4">
-      <button type="button" @click="showPrivacy = false" class="w-full px-5 py-3 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm">
+      <button type="button" @click="showPrivacy = false; showPhotoNotice = true" class="w-full px-5 py-3 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm">
         Proceed <i class="fa-solid fa-arrow-right ml-1"></i>
       </button>
       <a href="login.php" class="block text-center text-xs text-slate-400 hover:text-slate-600 mt-3">Back to Login</a>
+    </div>
+  </div>
+</div>
+
+<!-- Photo/Video Recording notice popup: step 2 of 2, shown immediately
+     after the Privacy Notice is acknowledged. Same mandatory-read-through
+     treatment — no close/X button or click-outside dismiss, "I Understand"
+     is the only way through. No x-cloak: showPhotoNotice always starts
+     false, so there's no initial-load flash to guard against. Also no
+     x-transition: the Privacy Notice's own "Proceed" click hides that
+     modal and reveals this one in one handler, and pairing
+     x-transition on both sides of that same-tick swap leaves this one
+     stuck at display:none (confirmed via live testing, including with
+     trusted mouse clicks, not just synthetic ones) — an instant
+     reveal here is a fully acceptable trade for reliably working. -->
+<div x-show="showPhotoNotice"
+     class="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div class="p-6 sm:p-8">
+      <h2 class="text-center font-bold text-lg text-slate-800 mb-4">NOTICE: PHOTO AND VIDEO RECORDING</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">
+        <strong>Photography</strong> and <strong>videography</strong> will be conducted throughout this event.
+        Images and recordings may be used by <strong>Civil Service Commission</strong> for official event
+        documentation, information dissemination, and promotional/communications materials through its
+        official channels. By entering and participating in the event area, you acknowledge this notice.
+        If you have concerns regarding the use of your image, <strong>please approach the designated
+        event/privacy personnel.</strong>
+      </p>
+      <button type="button" @click="showPhotoNotice = false" class="mt-6 w-full px-5 py-3 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm">
+        I Understand
+      </button>
     </div>
   </div>
 </div>
