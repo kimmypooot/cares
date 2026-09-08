@@ -71,6 +71,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('success', 'Employment record added successfully.');
         } elseif ($action === 'edit') {
             $recordId = (int)($_POST['record_id'] ?? 0);
+
+            // Tracking rows (For Review/Withdrawn/Superseded) are managed
+            // exclusively through applicant-view.php's Tag for Review /
+            // Confirm Hired / Withdraw actions — refuse to edit one here,
+            // even via a crafted POST that bypassed the list-page guard.
+            $stateStmt = $pdo->prepare("SELECT employment_status FROM care_jf_employment_records WHERE id = :id");
+            $stateStmt->execute([':id' => $recordId]);
+            $existingStatus = $stateStmt->fetchColumn();
+            if (in_array($existingStatus, ['For Review', 'Withdrawn', 'Superseded'], true)) {
+                flash_set('error', 'This record is part of an in-progress or closed application review and cannot be edited here.');
+                redirect('applicant-view.php?id=' . $applicantId);
+            }
+
             $stmt = $pdo->prepare(
                 "UPDATE care_jf_employment_records SET agency_id=:agid, agency_company_name=:agency, agency_company_address=:address,
                  date_hired=:date, employment_status=:status, is_current=:current, remarks=:remarks WHERE id=:id"
@@ -106,6 +119,10 @@ if ($action === 'edit') {
     $rStmt = $pdo->prepare("SELECT * FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid");
     $rStmt->execute([':id' => $recordId, ':aid' => $applicantId]);
     $found = $rStmt->fetch();
+    if ($found && in_array($found['employment_status'], ['For Review', 'Withdrawn', 'Superseded'], true)) {
+        flash_set('error', 'This record is part of an in-progress or closed application review and cannot be edited here.');
+        redirect('applicant-view.php?id=' . $applicantId);
+    }
     if ($found) {
         $record = $found;
     }

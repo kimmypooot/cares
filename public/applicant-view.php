@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('applicant-view.php?id=' . $id);
         }
 
-        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
+        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id AND status = 'Active'");
         $agStmt->execute([':id' => $reviewAgencyId]);
         $reviewAgencyRow = $agStmt->fetch();
         if (!$reviewAgencyRow) {
@@ -147,19 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->beginTransaction();
         try {
-            // Vacancy must belong to the same agency and still have an
-            // opening — re-validated here, never trusted from the form.
-            $vacStmt = $pdo->prepare(
-                "SELECT vacant_count FROM care_jf_job_vacancies WHERE id = :vid AND agency_id = :agid AND status = 'Active'"
-            );
-            $vacStmt->execute([':vid' => $vacancyId, ':agid' => $rowAgencyId]);
-            $vacantCount = $vacStmt->fetchColumn();
-            if ($vacantCount === false || (int)$vacantCount < 1) {
-                $pdo->rollBack();
-                flash_set('error', 'Selected Job Vacancy is not available.');
-                redirect('applicant-view.php?id=' . $id);
-            }
-
             // Guard against a double-hire: only proceed if the applicant
             // genuinely still has no other current active employment record.
             $hireCheckStmt = $pdo->prepare(
@@ -172,6 +159,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('applicant-view.php?id=' . $id);
             }
 
+            // Atomic, race-safe decrement: the UPDATE's own WHERE clause
+            // enforces "still belongs to this agency, still Active, still
+            // has an opening" in one statement, so a concurrent confirm_hired
+            // against the same vacancy can't read-then-write a stale count
+            // (the lost-update race a plain SELECT-then-UPDATE would have) —
+            // matching generate_employer_id()'s SQL-side-arithmetic pattern
+            // in includes/functions.php rather than computing the new value
+            // in PHP.
+            // NOTE: status is assigned BEFORE vacant_count in this SET
+            // clause deliberately — MySQL evaluates a single UPDATE's SET
+            // assignments left to right, and a later assignment sees the
+            // already-updated value of an earlier-assigned column in the
+            // same statement (documented MySQL behavior, differs from
+            // standard SQL). Assigning vacant_count first and then
+            // referencing "vacant_count - 1" in status's IF() would read
+            // the ALREADY-decremented value, double-counting the decrement
+            // (e.g. 2 -> 1 would wrongly flip straight to 'Filled'). Doing
+            // status first means its "vacant_count - 1" still reads the
+            // original pre-statement value.
+            $decStmt = $pdo->prepare(
+                "UPDATE care_jf_job_vacancies
+                    SET status = IF(vacant_count - 1 <= 0, 'Filled', status),
+                        vacant_count = vacant_count - 1
+                  WHERE id = :vid AND agency_id = :agid AND status = 'Active' AND vacant_count > 0"
+            );
+            $decStmt->execute([':vid' => $vacancyId, ':agid' => $rowAgencyId]);
+            if ($decStmt->rowCount() === 0) {
+                $pdo->rollBack();
+                flash_set('error', 'Selected Job Vacancy is not available.');
+                redirect('applicant-view.php?id=' . $id);
+            }
+
             // Standing is_current bookkeeping rule: clear before setting.
             $pdo->prepare("UPDATE care_jf_employment_records SET is_current = 0 WHERE applicant_id = :aid")
                 ->execute([':aid' => $id]);
@@ -179,11 +198,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare(
                 "UPDATE care_jf_employment_records SET employment_status = 'Hired', is_current = 1, date_hired = CURDATE(), vacancy_id = :vid WHERE id = :id"
             )->execute([':vid' => $vacancyId, ':id' => $recordId]);
-
-            $newVacantCount = (int)$vacantCount - 1;
-            $newVacStatus = $newVacantCount <= 0 ? 'Filled' : 'Active';
-            $pdo->prepare("UPDATE care_jf_job_vacancies SET vacant_count = :vc, status = :st WHERE id = :id")
-                ->execute([':vc' => $newVacantCount, ':st' => $newVacStatus, ':id' => $vacancyId]);
 
             // Auto-close every other agency's still-open tag on this applicant.
             $superStmt = $pdo->prepare(
@@ -480,9 +494,10 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <tbody class="divide-y divide-slate-100">
               <?php foreach ($employmentRecords as $rec): ?>
               <?php
-                $isOwnAgencyRow = !empty($rec['agency_id']) && is_partner_agency() && (int)$rec['agency_id'] === current_agency_id($pdo);
+                $isOwnAgencyRow = !empty($rec['agency_id']) && is_partner_agency() && (int)$rec['agency_id'] === $myAgencyIdForCheck;
                 $canActOnReview = can_manage_employment() || $isOwnAgencyRow;
                 $canEditRemarks = in_array($rec['employment_status'], ['For Review', 'Hired'], true) && $canActOnReview;
+                $hideRemarksFromOtherAgency = $rec['employment_status'] === 'Hired' && is_partner_agency() && !$isOwnAgencyRow;
               ?>
               <tr>
                 <td class="py-2.5 pr-3">
@@ -500,7 +515,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                       <input type="text" name="remarks" maxlength="255" value="<?= e($rec['remarks'] ?? '') ?>" placeholder="Add a private remark..." class="flex-1 text-xs rounded border border-slate-300 px-2 py-1">
                       <button type="submit" class="text-xs text-brand-600 hover:text-brand-800 px-1.5 py-1" title="Save Remarks"><i class="fa-solid fa-floppy-disk"></i></button>
                     </form>
-                  <?php elseif (!empty($rec['remarks'])): ?>
+                  <?php elseif (!empty($rec['remarks']) && !$hideRemarksFromOtherAgency): ?>
                     <p class="text-xs text-slate-500 mt-1"><i class="fa-solid fa-note-sticky text-slate-400 mr-1"></i><?= e($rec['remarks']) ?></p>
                   <?php endif; ?>
                 </td>
@@ -600,6 +615,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
           $current = null;
           foreach ($employmentRecords as $rec) { if ($rec['is_current'] && $rec['status'] === 'Active') { $current = $rec; break; } }
         ?>
+        <?php $hideCurrentRemarksFromOtherAgency = $current && is_partner_agency() && (int)($current['agency_id'] ?? 0) !== $myAgencyIdForCheck; ?>
         <?php if ($current): ?>
           <dl class="mt-4 space-y-2 text-sm">
             <div><dt class="text-slate-500">Agency/Company</dt><dd class="font-medium text-slate-800"><?= e($current['agency_display_name']) ?></dd></div>
@@ -616,7 +632,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <?php endif; ?>
             <?php endif; ?>
             <div><dt class="text-slate-500">Date Hired</dt><dd class="font-medium text-slate-800"><?= $current['date_hired'] ? format_date($current['date_hired']) : '—' ?></dd></div>
-            <?php if (!empty($current['remarks'])): ?>
+            <?php if (!empty($current['remarks']) && !$hideCurrentRemarksFromOtherAgency): ?>
             <div><dt class="text-slate-500">Remarks</dt><dd class="font-medium text-slate-800"><?= e($current['remarks']) ?></dd></div>
             <?php endif; ?>
           </dl>

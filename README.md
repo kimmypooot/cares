@@ -20,6 +20,8 @@ mysql -u root -p < database/database.sql
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
 mysql -u root -p < database/migrations/rename_database_and_tables.sql
+mysql -u root -p < database/migrations/add_job_vacancies_and_employer_id.sql
+mysql -u root -p < database/migrations/add_application_tracking_and_hiring_workflow.sql
 ```
 
 **Upgrading an existing v1 installation** (preserves all data — do NOT run
@@ -29,6 +31,8 @@ mysql -u root -p applicant_system < database/migrations/update_application_manag
 mysql -u root -p applicant_system < database/migrations/add_partner_agency_accounts.sql
 mysql -u root -p applicant_system < database/migrations/add_hired_status_and_uppercase_backfill.sql
 mysql -u root -p < database/migrations/rename_database_and_tables.sql
+mysql -u root -p < database/migrations/add_job_vacancies_and_employer_id.sql
+mysql -u root -p < database/migrations/add_application_tracking_and_hiring_workflow.sql
 ```
 
 (Once you've confirmed the application works correctly, the now-empty
@@ -114,7 +118,8 @@ ini_set('session.cookie_secure', '1');
 │       ├── add_partner_agency_accounts.sql                       Adds partner agency accounts
 │       ├── add_hired_status_and_uppercase_backfill.sql           Adds hired status + uppercase backfill
 │       ├── rename_database_and_tables.sql                        Renames DB to care_job_fair_db, prefixes tables with care_jf_
-│       └── add_job_vacancies_and_employer_id.sql                 Adds Job Vacancies module + atomic Employer ID generation
+│       ├── add_job_vacancies_and_employer_id.sql                 Adds Job Vacancies module + atomic Employer ID generation
+│       └── add_application_tracking_and_hiring_workflow.sql      Extends employment_records for Tag for Review / Confirm Hired workflow
 ├── includes/            auth.php, csrf.php, functions.php, header.php, footer.php, sidebar.php, qr-scanner-modal.php, xlsx_writer.php
 ├── public/               Web-accessible root
 │   ├── login.php                  Landing hub: Login / Register Applicant / Sign Up

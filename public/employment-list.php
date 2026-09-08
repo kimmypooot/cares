@@ -48,7 +48,12 @@ $classFilter = clean($_GET['classification'] ?? 'All');
 $agencyFilter = clean($_GET['agency'] ?? 'All');
 [$limit, $offset, $page] = paginate_params();
 
-$where = ['a.is_deleted = 0'];
+// Tracking rows (For Review/Withdrawn/Superseded — see CLAUDE.md's note
+// on care_jf_employment_records) are managed exclusively through
+// applicant-view.php's Tag for Review / Confirm Hired / Withdraw actions,
+// not through this generic list. Excluded here so they can't be reached
+// and silently mutated via the Edit/Enable/Disable/Delete actions below.
+$where = ['a.is_deleted = 0', "er.employment_status NOT IN ('For Review', 'Withdrawn', 'Superseded')"];
 $params = [];
 
 if ($search !== '') {
