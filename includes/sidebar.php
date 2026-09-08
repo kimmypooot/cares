@@ -8,11 +8,12 @@ if (is_partner_agency()) {
     // Partner Agency: no Employment module, no cross-agency Partner Agency
     // management page — their own profile lives at my-agency.php instead.
     $navItems = [
-        ['href' => 'dashboard.php',  'icon' => 'fa-gauge-high',    'label' => 'Dashboard',         'match' => ['dashboard.php']],
-        ['href' => 'applicants.php', 'icon' => 'fa-users',         'label' => 'Applicants',        'match' => ['applicants.php', 'applicant-view.php']],
-        ['href' => 'my-agency.php',  'icon' => 'fa-building',      'label' => 'My Partner Agency', 'match' => ['my-agency.php']],
-        ['href' => 'vacancies.php',  'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies', 'match' => ['vacancies.php']],
-        ['href' => 'reports.php',    'icon' => 'fa-chart-column',  'label' => 'Reports',           'match' => ['reports.php']],
+        ['href' => 'dashboard.php',      'icon' => 'fa-gauge-high',        'label' => 'Dashboard',         'match' => ['dashboard.php']],
+        ['href' => 'applicants.php',     'icon' => 'fa-users',             'label' => 'Applicants',        'match' => ['applicants.php', 'applicant-view.php']],
+        ['href' => 'my-agency.php',      'icon' => 'fa-building',          'label' => 'My Partner Agency', 'match' => ['my-agency.php']],
+        ['href' => 'agency-users.php',   'icon' => 'fa-users-gear',        'label' => 'Agency Users',       'match' => ['agency-users.php']],
+        ['href' => 'vacancies.php',      'icon' => 'fa-briefcase-medical', 'label' => 'Job Vacancies',      'match' => ['vacancies.php']],
+        ['href' => 'reports.php',        'icon' => 'fa-chart-column',      'label' => 'Reports',            'match' => ['reports.php']],
     ];
 } else {
     $navItems = [
