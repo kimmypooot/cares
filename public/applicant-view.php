@@ -60,80 +60,280 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         audit_log($pdo, (int)current_user()['id'], 'DELETE', 'care_jf_employment_records', $recordId, 'Employment record deleted');
         flash_set('success', 'Employment record deleted.');
         redirect('applicant-view.php?id=' . $id);
-    } elseif ($action === 'mark_hired') {
+    } elseif ($action === 'tag_for_review') {
         if (!can_manage_employment() && !is_partner_agency()) {
             http_response_code(403);
             die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
         }
 
-        // Agency identity is always server-derived for a Partner Agency —
-        // never trusted from the request. Administrator/Employee explicitly
-        // choose which agency to credit with the hire.
-        if (is_partner_agency()) {
-            $hireAgencyId = current_agency_id($pdo);
-        } else {
-            $hireAgencyId = !empty($_POST['agency_id']) ? (int)$_POST['agency_id'] : null;
-        }
-
-        if (!$hireAgencyId) {
-            flash_set('error', 'Select a Partner Agency to hire this applicant into.');
-            redirect('applicant-view.php?id=' . $id);
-        }
-
-        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
-        $agStmt->execute([':id' => $hireAgencyId]);
-        $hireAgencyRow = $agStmt->fetch();
-        if (!$hireAgencyRow) {
-            flash_set('error', 'Selected Partner Agency was not found.');
-            redirect('applicant-view.php?id=' . $id);
-        }
-
-        // Guard against a double-hire: only proceed if the applicant genuinely
-        // still has no current active employment record right now.
-        $hireCheckStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
-        );
-        $hireCheckStmt->execute([':id' => $id]);
-        if ((int)$hireCheckStmt->fetchColumn() > 0) {
+        if (is_applicant_hired($pdo, $id)) {
             flash_set('error', 'This applicant has already been hired.');
             redirect('applicant-view.php?id=' . $id);
         }
 
-        $hireStmt = $pdo->prepare(
-            "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
-             VALUES (:aid, :agid, :agency, :address, CURDATE(), 'Hired', 1, 'Active')"
+        // Agency identity is always server-derived for a Partner Agency —
+        // never trusted from the request. Administrator/Employee explicitly
+        // choose which agency to tag on behalf of.
+        if (is_partner_agency()) {
+            $reviewAgencyId = current_agency_id($pdo);
+        } else {
+            $reviewAgencyId = !empty($_POST['agency_id']) ? (int)$_POST['agency_id'] : null;
+        }
+
+        if (!$reviewAgencyId) {
+            flash_set('error', 'Select a Partner Agency to tag for review.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id");
+        $agStmt->execute([':id' => $reviewAgencyId]);
+        $reviewAgencyRow = $agStmt->fetch();
+        if (!$reviewAgencyRow) {
+            flash_set('error', 'Selected Partner Agency was not found.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        // No duplicate concurrent tags from the same agency — re-tagging is
+        // fine once a prior tag has moved to Withdrawn/Superseded/Hired,
+        // since none of those match this check.
+        $dupStmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND agency_id = :agid AND employment_status = 'For Review'"
         );
-        $hireStmt->execute([
-            ':aid' => $id, ':agid' => $hireAgencyId,
-            ':agency' => $hireAgencyRow['agency_name'], ':address' => $hireAgencyRow['address'],
+        $dupStmt->execute([':id' => $id, ':agid' => $reviewAgencyId]);
+        if ((int)$dupStmt->fetchColumn() > 0) {
+            flash_set('error', 'This agency has already tagged this applicant for review.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $tagStmt = $pdo->prepare(
+            "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
+             VALUES (:aid, :agid, :agency, :address, NULL, 'For Review', 0, 'Active')"
+        );
+        $tagStmt->execute([
+            ':aid' => $id, ':agid' => $reviewAgencyId,
+            ':agency' => $reviewAgencyRow['agency_name'], ':address' => $reviewAgencyRow['address'],
         ]);
-        $newHireId = (int)$pdo->lastInsertId();
-        audit_log($pdo, (int)current_user()['id'], 'MARK_HIRED', 'care_jf_employment_records', $newHireId,
-            "Applicant {$applicant['applicant_code']} marked Hired by {$hireAgencyRow['agency_name']}");
-        flash_set('success', 'Applicant marked as Hired.');
+        $newReviewId = (int)$pdo->lastInsertId();
+        audit_log($pdo, (int)current_user()['id'], 'APPLICANT_TAGGED_FOR_REVIEW', 'care_jf_employment_records', $newReviewId,
+            "Applicant {$applicant['applicant_code']} tagged For Review by {$reviewAgencyRow['agency_name']}");
+        flash_set('success', 'Applicant tagged for review.');
+        redirect('applicant-view.php?id=' . $id);
+    } elseif ($action === 'confirm_hired') {
+        if (!can_manage_employment() && !is_partner_agency()) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
+        }
+
+        $recordId = (int)($_POST['record_id'] ?? 0);
+        $vacancyId = (int)($_POST['vacancy_id'] ?? 0);
+
+        // Resolve and verify ownership of the review row being confirmed —
+        // DB-resolved, never trusted from the request.
+        $rowStmt = $pdo->prepare(
+            "SELECT agency_id FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid AND employment_status = 'For Review'"
+        );
+        $rowStmt->execute([':id' => $recordId, ':aid' => $id]);
+        $rowAgencyId = (int)($rowStmt->fetchColumn() ?: 0);
+
+        if (!$rowAgencyId || (is_partner_agency() && $rowAgencyId !== current_agency_id($pdo))) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to confirm this hire.</h2>');
+        }
+
+        if (!$vacancyId) {
+            flash_set('error', 'Select a Job Vacancy to confirm this hire.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            // Vacancy must belong to the same agency and still have an
+            // opening — re-validated here, never trusted from the form.
+            $vacStmt = $pdo->prepare(
+                "SELECT vacant_count FROM care_jf_job_vacancies WHERE id = :vid AND agency_id = :agid AND status = 'Active'"
+            );
+            $vacStmt->execute([':vid' => $vacancyId, ':agid' => $rowAgencyId]);
+            $vacantCount = $vacStmt->fetchColumn();
+            if ($vacantCount === false || (int)$vacantCount < 1) {
+                $pdo->rollBack();
+                flash_set('error', 'Selected Job Vacancy is not available.');
+                redirect('applicant-view.php?id=' . $id);
+            }
+
+            // Guard against a double-hire: only proceed if the applicant
+            // genuinely still has no other current active employment record.
+            $hireCheckStmt = $pdo->prepare(
+                "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND is_current = 1 AND status = 'Active'"
+            );
+            $hireCheckStmt->execute([':id' => $id]);
+            if ((int)$hireCheckStmt->fetchColumn() > 0) {
+                $pdo->rollBack();
+                flash_set('error', 'This applicant has already been hired.');
+                redirect('applicant-view.php?id=' . $id);
+            }
+
+            // Standing is_current bookkeeping rule: clear before setting.
+            $pdo->prepare("UPDATE care_jf_employment_records SET is_current = 0 WHERE applicant_id = :aid")
+                ->execute([':aid' => $id]);
+
+            $pdo->prepare(
+                "UPDATE care_jf_employment_records SET employment_status = 'Hired', is_current = 1, date_hired = CURDATE(), vacancy_id = :vid WHERE id = :id"
+            )->execute([':vid' => $vacancyId, ':id' => $recordId]);
+
+            $newVacantCount = (int)$vacantCount - 1;
+            $newVacStatus = $newVacantCount <= 0 ? 'Filled' : 'Active';
+            $pdo->prepare("UPDATE care_jf_job_vacancies SET vacant_count = :vc, status = :st WHERE id = :id")
+                ->execute([':vc' => $newVacantCount, ':st' => $newVacStatus, ':id' => $vacancyId]);
+
+            // Auto-close every other agency's still-open tag on this applicant.
+            $superStmt = $pdo->prepare(
+                "SELECT id FROM care_jf_employment_records WHERE applicant_id = :aid AND employment_status = 'For Review' AND id != :rid"
+            );
+            $superStmt->execute([':aid' => $id, ':rid' => $recordId]);
+            foreach ($superStmt->fetchAll(PDO::FETCH_COLUMN) as $supersededId) {
+                $pdo->prepare("UPDATE care_jf_employment_records SET employment_status = 'Superseded' WHERE id = :id")
+                    ->execute([':id' => $supersededId]);
+                audit_log($pdo, (int)current_user()['id'], 'APPLICANT_REVIEW_SUPERSEDED', 'care_jf_employment_records', (int)$supersededId,
+                    "Superseded by another agency's confirmed hire");
+            }
+
+            audit_log($pdo, (int)current_user()['id'], 'APPLICANT_HIRED', 'care_jf_employment_records', $recordId,
+                "Applicant {$applicant['applicant_code']} hired");
+            audit_log($pdo, (int)current_user()['id'], 'VACANCY_DECREMENT', 'care_jf_job_vacancies', $vacancyId,
+                "Vacancy decremented (hire: {$applicant['applicant_code']})");
+
+            $pdo->commit();
+            flash_set('success', 'Applicant confirmed as Hired.');
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Confirm Hired failed: ' . $e->getMessage());
+            flash_set('error', 'Confirming this hire failed due to a system error. Please try again.');
+        }
+        redirect('applicant-view.php?id=' . $id);
+    } elseif ($action === 'withdraw_review') {
+        if (!can_manage_employment() && !is_partner_agency()) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
+        }
+
+        $recordId = (int)($_POST['record_id'] ?? 0);
+        $rowStmt = $pdo->prepare(
+            "SELECT agency_id FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid AND employment_status = 'For Review'"
+        );
+        $rowStmt->execute([':id' => $recordId, ':aid' => $id]);
+        $rowAgencyId = (int)($rowStmt->fetchColumn() ?: 0);
+
+        if (!$rowAgencyId || (is_partner_agency() && $rowAgencyId !== current_agency_id($pdo))) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to withdraw this tag.</h2>');
+        }
+
+        $pdo->prepare("UPDATE care_jf_employment_records SET employment_status = 'Withdrawn' WHERE id = :id")
+            ->execute([':id' => $recordId]);
+        audit_log($pdo, (int)current_user()['id'], 'APPLICANT_REVIEW_WITHDRAWN', 'care_jf_employment_records', $recordId,
+            "Applicant {$applicant['applicant_code']} review tag withdrawn");
+        flash_set('success', 'Review tag withdrawn.');
+        redirect('applicant-view.php?id=' . $id);
+    } elseif ($action === 'update_remarks') {
+        if (!can_manage_employment() && !is_partner_agency()) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
+        }
+
+        $recordId = (int)($_POST['record_id'] ?? 0);
+        $remarks = clean($_POST['remarks'] ?? '');
+
+        if (mb_strlen($remarks) > 255) {
+            flash_set('error', 'Remarks must be 255 characters or fewer.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $rowStmt = $pdo->prepare(
+            "SELECT agency_id FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid AND employment_status IN ('For Review', 'Hired')"
+        );
+        $rowStmt->execute([':id' => $recordId, ':aid' => $id]);
+        $rowAgencyId = (int)($rowStmt->fetchColumn() ?: 0);
+
+        if (!$rowAgencyId || (is_partner_agency() && $rowAgencyId !== current_agency_id($pdo))) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to update remarks on this record.</h2>');
+        }
+
+        $pdo->prepare("UPDATE care_jf_employment_records SET remarks = :r WHERE id = :id")
+            ->execute([':r' => $remarks !== '' ? $remarks : null, ':id' => $recordId]);
+        audit_log($pdo, (int)current_user()['id'], 'APPLICANT_REVIEW_REMARKS_UPDATED', 'care_jf_employment_records', $recordId,
+            "Remarks updated for applicant {$applicant['applicant_code']}");
+        flash_set('success', 'Remarks saved.');
         redirect('applicant-view.php?id=' . $id);
     }
 }
 
+$empWhere = "er.applicant_id = :id";
+$empParams = [':id' => $id];
+if (is_partner_agency()) {
+    // Partner Agency sees every confirmed/historical record exactly as
+    // before, plus only their OWN in-flight tags — never another
+    // agency's For Review/Withdrawn/Superseded row.
+    $empWhere .= " AND (er.employment_status NOT IN ('For Review', 'Withdrawn', 'Superseded') OR er.agency_id = :myagid)";
+    $empParams[':myagid'] = current_agency_id($pdo);
+}
 $empStmt = $pdo->prepare(
     "SELECT er.*, COALESCE(pa.agency_name, er.agency_company_name) AS agency_display_name,
             pa.contact_person AS agency_contact_person, pa.contact_no AS agency_contact_no, pa.email AS agency_email
      FROM care_jf_employment_records er
      LEFT JOIN care_jf_partner_agencies pa ON pa.id = er.agency_id
-     WHERE er.applicant_id = :id ORDER BY er.date_hired DESC, er.id DESC"
+     WHERE $empWhere ORDER BY er.created_at DESC, er.id DESC"
 );
-$empStmt->execute([':id' => $id]);
+$empStmt->execute($empParams);
 $employmentRecords = $empStmt->fetchAll();
 
 $status = current_employment_status($pdo, $id);
+$applicantIsHired = is_applicant_hired($pdo, $id);
 
-$hireAgencies = can_manage_employment() ? active_agencies($pdo) : [];
 $myAgencyName = '';
+$myAgencyIdForCheck = null;
 if (is_partner_agency()) {
+    $myAgencyIdForCheck = current_agency_id($pdo);
     $myAgencyStmt = $pdo->prepare("SELECT agency_name FROM care_jf_partner_agencies WHERE id = :id");
-    $myAgencyStmt->execute([':id' => current_agency_id($pdo)]);
+    $myAgencyStmt->execute([':id' => $myAgencyIdForCheck]);
     $myAgencyName = (string)$myAgencyStmt->fetchColumn();
 }
+
+$myOpenReview = null;
+if (is_partner_agency()) {
+    foreach ($employmentRecords as $rec) {
+        if ($rec['employment_status'] === 'For Review' && (int)$rec['agency_id'] === $myAgencyIdForCheck) {
+            $myOpenReview = $rec;
+            break;
+        }
+    }
+}
+
+// Agencies with an open (For Review) tag on this applicant right now —
+// used both to scope which agencies' vacancies to fetch and to exclude
+// them from the "tag a new agency" dropdown (no duplicate concurrent tags).
+$reviewingAgencyIds = array_values(array_unique(array_map('intval', array_column(
+    array_filter($employmentRecords, fn($r) => $r['employment_status'] === 'For Review'), 'agency_id'
+))));
+
+$vacancyOptionsByAgency = [];
+if ($reviewingAgencyIds) {
+    $inClause = implode(',', array_fill(0, count($reviewingAgencyIds), '?'));
+    $vacStmt = $pdo->prepare(
+        "SELECT id, agency_id, position, job_level, vacant_count FROM care_jf_job_vacancies
+         WHERE agency_id IN ($inClause) AND status = 'Active' AND vacant_count > 0 ORDER BY position"
+    );
+    $vacStmt->execute($reviewingAgencyIds);
+    foreach ($vacStmt->fetchAll() as $vRow) {
+        $vacancyOptionsByAgency[(int)$vRow['agency_id']][] = $vRow;
+    }
+}
+
+$tagAgencyOptions = can_manage_employment()
+    ? array_values(array_filter(active_agencies($pdo), fn($ag) => !in_array((int)$ag['id'], $reviewingAgencyIds, true)))
+    : [];
 
 $pageTitle = 'Applicant Profile';
 require_once __DIR__ . '/../includes/header.php';
@@ -212,12 +412,47 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </dl>
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+      <?php
+        $canTagAsPartnerAgency = is_partner_agency() && !$myOpenReview && !$applicantIsHired;
+        $canTagAsStaff = can_manage_employment() && $tagAgencyOptions && !$applicantIsHired;
+      ?>
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ confirmHireRecordId: null, showTagForReview: false }">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Employment History</h2>
-          <?php if (can_edit()): ?>
-          <a href="employment-form.php?applicant_id=<?= (int)$id ?>&action=add" class="text-xs font-medium text-brand-600 hover:text-brand-800 print:hidden"><i class="fa-solid fa-plus mr-1"></i> Add Record</a>
-          <?php endif; ?>
+          <div class="flex gap-3 print:hidden">
+            <?php if ($canTagAsPartnerAgency || $canTagAsStaff): ?>
+            <button type="button" @click="showTagForReview = true" class="text-xs font-medium text-emerald-600 hover:text-emerald-800"><i class="fa-solid fa-flag mr-1"></i> Tag for Review</button>
+            <?php endif; ?>
+            <?php if (can_edit()): ?>
+            <a href="employment-form.php?applicant_id=<?= (int)$id ?>&action=add" class="text-xs font-medium text-brand-600 hover:text-brand-800"><i class="fa-solid fa-plus mr-1"></i> Add Record</a>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div x-show="showTagForReview" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
+          <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="showTagForReview = false">
+            <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-flag text-emerald-600 mr-1"></i> Tag for Review</h3>
+            <form method="POST">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="tag_for_review">
+              <input type="hidden" name="id" value="<?= (int)$id ?>">
+              <?php if (can_manage_employment()): ?>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
+                <select name="agency_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
+                  <option value="">Select a Partner Agency</option>
+                  <?php foreach ($tagAgencyOptions as $ag): ?>
+                    <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              <?php else: ?>
+                <p class="text-sm text-slate-600 mb-5">Tag <?= e(full_name($applicant)) ?> for review by <strong><?= e($myAgencyName) ?></strong>?</p>
+              <?php endif; ?>
+              <div class="flex justify-end gap-2">
+                <button type="button" @click="showTagForReview = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Confirm Tag</button>
+              </div>
+            </form>
+          </div>
         </div>
 
         <?php if (!$employmentRecords): ?>
@@ -225,6 +460,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <i class="fa-solid fa-briefcase text-2xl mb-2 block"></i> No employment records yet.
           </div>
         <?php else: ?>
+        <?php $classColors = [
+            'For Review' => 'bg-amber-100 text-amber-800',
+            'Hired'      => 'bg-emerald-100 text-emerald-800',
+            'Withdrawn'  => 'bg-gray-100 text-gray-500',
+            'Superseded' => 'bg-gray-100 text-gray-500',
+        ]; ?>
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
@@ -238,6 +479,11 @@ require_once __DIR__ . '/../includes/sidebar.php';
             </thead>
             <tbody class="divide-y divide-slate-100">
               <?php foreach ($employmentRecords as $rec): ?>
+              <?php
+                $isOwnAgencyRow = !empty($rec['agency_id']) && is_partner_agency() && (int)$rec['agency_id'] === current_agency_id($pdo);
+                $canActOnReview = can_manage_employment() || $isOwnAgencyRow;
+                $canEditRemarks = in_array($rec['employment_status'], ['For Review', 'Hired'], true) && $canActOnReview;
+              ?>
               <tr>
                 <td class="py-2.5 pr-3">
                   <?= e($rec['agency_display_name']) ?>
@@ -245,36 +491,87 @@ require_once __DIR__ . '/../includes/sidebar.php';
                     <span class="ml-1 text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full align-middle">CURRENT</span>
                   <?php endif; ?>
                   <p class="text-xs text-slate-400"><?= e($rec['agency_company_address']) ?></p>
-                  <?php if (!empty($rec['remarks'])): ?>
+                  <?php if ($canEditRemarks): ?>
+                    <form method="POST" class="mt-1 flex items-start gap-1 print:hidden">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="id" value="<?= (int)$id ?>">
+                      <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
+                      <input type="hidden" name="action" value="update_remarks">
+                      <input type="text" name="remarks" maxlength="255" value="<?= e($rec['remarks'] ?? '') ?>" placeholder="Add a private remark..." class="flex-1 text-xs rounded border border-slate-300 px-2 py-1">
+                      <button type="submit" class="text-xs text-brand-600 hover:text-brand-800 px-1.5 py-1" title="Save Remarks"><i class="fa-solid fa-floppy-disk"></i></button>
+                    </form>
+                  <?php elseif (!empty($rec['remarks'])): ?>
                     <p class="text-xs text-slate-500 mt-1"><i class="fa-solid fa-note-sticky text-slate-400 mr-1"></i><?= e($rec['remarks']) ?></p>
                   <?php endif; ?>
                 </td>
-                <td class="py-2.5 pr-3"><?= format_date($rec['date_hired']) ?></td>
-                <td class="py-2.5 pr-3 uppercase"><?= e($rec['employment_status']) ?></td>
+                <td class="py-2.5 pr-3"><?= $rec['date_hired'] ? format_date($rec['date_hired']) : '—' ?></td>
+                <td class="py-2.5 pr-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium uppercase <?= $classColors[$rec['employment_status']] ?? 'bg-slate-100 text-slate-700' ?>"><?= e($rec['employment_status']) ?></span></td>
                 <td class="py-2.5 pr-3">
                   <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $rec['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($rec['status']) ?></span>
                 </td>
                 <td class="py-2.5 text-right print:hidden">
-                  <?php if (can_edit()): ?>
-                  <a href="employment-form.php?applicant_id=<?= (int)$id ?>&action=edit&record_id=<?= (int)$rec['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                  <form method="POST" class="inline">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int)$id ?>">
-                    <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
-                    <input type="hidden" name="action" value="<?= $rec['status']==='Active' ? 'disable_employment' : 'enable_employment' ?>">
-                    <button type="submit" class="text-slate-500 hover:text-blue-600 px-1" title="<?= $rec['status']==='Active' ? 'Disable' : 'Enable' ?>">
-                      <i class="fa-solid <?= $rec['status']==='Active' ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
-                    </button>
-                  </form>
-                  <?php endif; ?>
-                  <?php if (can_delete()): ?>
-                  <form method="POST" class="inline">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int)$id ?>">
-                    <input type="hidden" name="action" value="delete_employment">
-                    <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
-                    <button type="button" data-confirm-delete="this employment record" class="text-slate-500 hover:text-red-600 px-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
-                  </form>
+                  <?php if ($rec['employment_status'] === 'For Review' && $canActOnReview): ?>
+                    <button type="button" @click="confirmHireRecordId = <?= (int)$rec['id'] ?>" class="text-slate-500 hover:text-emerald-600 px-1" title="Confirm Hired"><i class="fa-solid fa-handshake"></i></button>
+                    <form method="POST" class="inline">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="id" value="<?= (int)$id ?>">
+                      <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
+                      <input type="hidden" name="action" value="withdraw_review">
+                      <button type="button" data-confirm-delete="<?= e($rec['agency_display_name']) ?>'s review tag" data-confirm-verb="Withdraw" class="text-slate-500 hover:text-red-600 px-1" title="Withdraw"><i class="fa-solid fa-rotate-left"></i></button>
+                    </form>
+
+                    <div x-show="confirmHireRecordId === <?= (int)$rec['id'] ?>" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
+                      <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-left" @click.outside="confirmHireRecordId = null">
+                        <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-circle-question text-emerald-600 mr-1"></i> Confirm Hire</h3>
+                        <p class="text-sm text-slate-600 mb-3">Confirm <?= e(full_name($applicant)) ?> as hired by <strong><?= e($rec['agency_display_name']) ?></strong>?</p>
+                        <form method="POST">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="action" value="confirm_hired">
+                          <input type="hidden" name="id" value="<?= (int)$id ?>">
+                          <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
+                          <?php $vacOptions = $vacancyOptionsByAgency[(int)$rec['agency_id']] ?? []; ?>
+                          <label class="block text-sm font-medium text-slate-700 mb-1">Job Vacancy <span class="text-red-500">*</span></label>
+                          <?php if ($vacOptions): ?>
+                          <select name="vacancy_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
+                            <option value="">Select a Job Vacancy</option>
+                            <?php foreach ($vacOptions as $v): ?>
+                              <option value="<?= (int)$v['id'] ?>"><?= e($v['position']) ?> (<?= e($v['job_level']) ?>, <?= (int)$v['vacant_count'] ?> open)</option>
+                            <?php endforeach; ?>
+                          </select>
+                          <?php else: ?>
+                          <p class="text-xs text-red-500 mb-4">This agency has no open Job Vacancies with available slots. Add one under Job Vacancies first.</p>
+                          <?php endif; ?>
+                          <div class="flex justify-end gap-2">
+                            <button type="button" @click="confirmHireRecordId = null" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
+                            <button type="submit" <?= $vacOptions ? '' : 'disabled' ?> class="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed">Confirm &amp; Hire</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  <?php elseif (in_array($rec['employment_status'], ['Withdrawn', 'Superseded'], true)): ?>
+                    <span class="text-xs text-slate-300 px-1">—</span>
+                  <?php else: ?>
+                    <?php if (can_edit()): ?>
+                    <a href="employment-form.php?applicant_id=<?= (int)$id ?>&action=edit&record_id=<?= (int)$rec['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                    <form method="POST" class="inline">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="id" value="<?= (int)$id ?>">
+                      <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
+                      <input type="hidden" name="action" value="<?= $rec['status']==='Active' ? 'disable_employment' : 'enable_employment' ?>">
+                      <button type="submit" class="text-slate-500 hover:text-blue-600 px-1" title="<?= $rec['status']==='Active' ? 'Disable' : 'Enable' ?>">
+                        <i class="fa-solid <?= $rec['status']==='Active' ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
+                      </button>
+                    </form>
+                    <?php endif; ?>
+                    <?php if (can_delete()): ?>
+                    <form method="POST" class="inline">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="id" value="<?= (int)$id ?>">
+                      <input type="hidden" name="action" value="delete_employment">
+                      <input type="hidden" name="record_id" value="<?= (int)$rec['id'] ?>">
+                      <button type="button" data-confirm-delete="this employment record" class="text-slate-500 hover:text-red-600 px-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                    </form>
+                    <?php endif; ?>
                   <?php endif; ?>
                 </td>
               </tr>
@@ -296,7 +593,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
 
     <div class="space-y-6">
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ showHireConfirm: false, hireAgencyId: '' }">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
         <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-3">Employment Status</h2>
         <span class="inline-block px-3 py-1.5 rounded-full text-sm font-semibold <?= $status['color'] ?>"><?= e(strtoupper($status['label'])) ?></span>
         <?php
@@ -318,44 +615,13 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <div><dt class="text-slate-500">Agency Email</dt><dd class="font-medium text-slate-800"><?= e($current['agency_email']) ?></dd></div>
               <?php endif; ?>
             <?php endif; ?>
-            <div><dt class="text-slate-500">Date Hired</dt><dd class="font-medium text-slate-800"><?= format_date($current['date_hired']) ?></dd></div>
+            <div><dt class="text-slate-500">Date Hired</dt><dd class="font-medium text-slate-800"><?= $current['date_hired'] ? format_date($current['date_hired']) : '—' ?></dd></div>
             <?php if (!empty($current['remarks'])): ?>
             <div><dt class="text-slate-500">Remarks</dt><dd class="font-medium text-slate-800"><?= e($current['remarks']) ?></dd></div>
             <?php endif; ?>
           </dl>
-        <?php elseif (can_manage_employment() || is_partner_agency()): ?>
-          <div class="mt-4 print:hidden">
-            <button type="button" @click="showHireConfirm = true" class="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm">
-              <i class="fa-solid fa-handshake mr-1"></i> Mark as Hired
-            </button>
-          </div>
-
-          <!-- Confirmation modal -->
-          <div x-show="showHireConfirm" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
-            <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="showHireConfirm = false">
-              <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-circle-question text-emerald-600 mr-1"></i> Confirm Hire</h3>
-              <form method="POST">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="mark_hired">
-                <input type="hidden" name="id" value="<?= (int)$id ?>">
-                <?php if (can_manage_employment()): ?>
-                  <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
-                  <select name="agency_id" x-model="hireAgencyId" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
-                    <option value="">Select a Partner Agency</option>
-                    <?php foreach ($hireAgencies as $ag): ?>
-                      <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
-                    <?php endforeach; ?>
-                  </select>
-                <?php else: ?>
-                  <p class="text-sm text-slate-600 mb-5">Mark <?= e(full_name($applicant)) ?> as hired by <strong><?= e($myAgencyName) ?></strong>?</p>
-                <?php endif; ?>
-                <div class="flex justify-end gap-2">
-                  <button type="button" @click="showHireConfirm = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
-                  <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Confirm &amp; Mark as Hired</button>
-                </div>
-              </form>
-            </div>
-          </div>
+        <?php else: ?>
+          <p class="mt-4 text-sm text-slate-500">Use the Employment History section to tag a Partner Agency for review, then confirm the hire once ready.</p>
         <?php endif; ?>
       </div>
     </div>
