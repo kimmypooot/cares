@@ -335,6 +335,29 @@ if (is_partner_agency()) {
     $myAgencyStmt = $pdo->prepare("SELECT agency_name FROM care_jf_partner_agencies WHERE id = :id");
     $myAgencyStmt->execute([':id' => $myAgencyIdForCheck]);
     $myAgencyName = (string)$myAgencyStmt->fetchColumn();
+
+    // Access control: once an applicant is hired, their record is no
+    // longer visible to any agency other than the one that hired them
+    // (the same rule applications.php's listing already applies via its
+    // "(er.id IS NULL OR er.agency_id = :my_agency_id)" filter). Without
+    // this check, a Partner Agency could reach any applicant's full PII
+    // — name, address, contact number, date of birth — by requesting
+    // applicant-view.php?id=N directly, bypassing that list-level
+    // filter entirely (the mutation actions below already check
+    // per-record ownership, but the page itself did not).
+    if ($applicantIsHired) {
+        $hiredByAgencyId = null;
+        foreach ($employmentRecords as $rec) {
+            if ((int)$rec['is_current'] === 1 && $rec['status'] === 'Active') {
+                $hiredByAgencyId = $rec['agency_id'] !== null ? (int)$rec['agency_id'] : null;
+                break;
+            }
+        }
+        if ($hiredByAgencyId !== $myAgencyIdForCheck) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — This applicant has been hired by another Partner Agency and is no longer visible to your account.</h2>');
+        }
+    }
 }
 
 $myOpenReview = null;

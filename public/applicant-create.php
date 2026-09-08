@@ -60,30 +60,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $code = generate_applicant_code($pdo);
-        $stmt = $pdo->prepare(
-            "INSERT INTO care_jf_applicants
-                (applicant_code, last_name, first_name, middle_name, extension_name, sex, date_of_birth, contact_number, address, civil_status)
-             VALUES
-                (:code, :ln, :fn, :mn, :ext, :sex, :dob, :contact, :address, :civil)"
-        );
-        $stmt->execute([
-            ':code'    => $code,
-            ':ln'      => $old['last_name'],
-            ':fn'      => $old['first_name'],
-            ':mn'      => $old['middle_name'] ?: null,
-            ':ext'     => $old['extension_name'] !== 'NONE' ? $old['extension_name'] : null,
-            ':sex'     => $old['sex'],
-            ':dob'     => $old['date_of_birth'],
-            ':contact' => $old['contact_number'],
-            ':address' => $old['address'],
-            ':civil'   => $old['civil_status'],
-        ]);
-        $newId = (int)$pdo->lastInsertId();
+        $pdo->beginTransaction();
+        try {
+            $code = generate_applicant_code($pdo);
+            $stmt = $pdo->prepare(
+                "INSERT INTO care_jf_applicants
+                    (applicant_code, last_name, first_name, middle_name, extension_name, sex, date_of_birth, contact_number, address, civil_status)
+                 VALUES
+                    (:code, :ln, :fn, :mn, :ext, :sex, :dob, :contact, :address, :civil)"
+            );
+            $stmt->execute([
+                ':code'    => $code,
+                ':ln'      => $old['last_name'],
+                ':fn'      => $old['first_name'],
+                ':mn'      => $old['middle_name'] ?: null,
+                ':ext'     => $old['extension_name'] !== 'NONE' ? $old['extension_name'] : null,
+                ':sex'     => $old['sex'],
+                ':dob'     => $old['date_of_birth'],
+                ':contact' => $old['contact_number'],
+                ':address' => $old['address'],
+                ':civil'   => $old['civil_status'],
+            ]);
+            $newId = (int)$pdo->lastInsertId();
 
-        audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_applicants', $newId, "Registered applicant $code");
-        flash_set('success', "Applicant $code successfully registered.");
-        redirect('applicant-view.php?id=' . $newId);
+            audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_applicants', $newId, "Registered applicant $code");
+            $pdo->commit();
+            flash_set('success', "Applicant $code successfully registered.");
+            redirect('applicant-view.php?id=' . $newId);
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            error_log('Applicant registration failed: ' . $e->getMessage());
+            $errors['general'] = 'A system error occurred while saving this applicant. Please try again.';
+        }
     }
 }
 
@@ -102,6 +110,12 @@ require_once __DIR__ . '/../includes/sidebar.php';
   <?php if (!empty($errors['duplicate'])): ?>
     <div class="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
       <i class="fa-solid fa-circle-exclamation mt-0.5"></i><span><?= e($errors['duplicate']) ?></span>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($errors['general'])): ?>
+    <div class="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
+      <i class="fa-solid fa-circle-exclamation mt-0.5"></i><span><?= e($errors['general']) ?></span>
     </div>
   <?php endif; ?>
 

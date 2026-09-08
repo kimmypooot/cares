@@ -74,30 +74,64 @@ function full_name(array $applicant): string
     return $name;
 }
 
-/** Generate the next sequential applicant code, e.g. APP-000001 */
 /**
  * Generate the next sequential applicant code for the current calendar
  * month, in the format APP-YYYYMM-NNNNNN (e.g. APP-202609-000001). The
  * 6-digit sequence resets to 000001 at the start of each new month.
+ *
+ * Uses the same atomic-counter pattern as generate_employer_id() (the
+ * shared care_jf_id_sequences table, keyed here by sequence_name =
+ * 'applicant_code' and year_key = the YYYYMM integer) rather than
+ * SELECT...ORDER BY DESC LIMIT 1 + increment in PHP. That read-then-write
+ * approach was a genuine TOCTOU race on this function's busiest caller,
+ * public/register-applicant.php — the unauthenticated, high-concurrency
+ * self-registration form used during a live job fair — where two
+ * concurrent submissions could read the same "last code so far" and
+ * compute the same next code, so one registration would fail outright
+ * on the applicant_code UNIQUE constraint instead of both succeeding.
  */
 function generate_applicant_code(PDO $pdo): string
 {
-    $yearMonth = date('Ym');
+    $yearMonth = (int)date('Ym');
     $prefix = 'APP-' . $yearMonth . '-';
-
-    $stmt = $pdo->prepare(
-        "SELECT applicant_code FROM care_jf_applicants
-         WHERE applicant_code LIKE :prefix
-         ORDER BY applicant_code DESC LIMIT 1"
-    );
-    $stmt->execute([':prefix' => $prefix . '%']);
-    $last = $stmt->fetchColumn();
-
-    $next = 1;
-    if ($last && preg_match('/-(\d+)$/', $last, $m)) {
-        $next = (int)$m[1] + 1;
+    $ownTransaction = !$pdo->inTransaction();
+    if ($ownTransaction) {
+        $pdo->beginTransaction();
     }
-    return $prefix . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
+    try {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $pdo->prepare(
+                "INSERT INTO care_jf_id_sequences (sequence_name, year_key, last_value) VALUES ('applicant_code', :y, 1)
+                 ON DUPLICATE KEY UPDATE last_value = last_value + 1"
+            )->execute([':y' => $yearMonth]);
+
+            $stmt = $pdo->prepare("SELECT last_value FROM care_jf_id_sequences WHERE sequence_name = 'applicant_code' AND year_key = :y");
+            $stmt->execute([':y' => $yearMonth]);
+            $next = (int)$stmt->fetchColumn();
+            $candidate = $prefix . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
+
+            $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM care_jf_applicants WHERE applicant_code = :code");
+            $existsStmt->execute([':code' => $candidate]);
+            if ((int)$existsStmt->fetchColumn() === 0) {
+                if ($ownTransaction) { $pdo->commit(); }
+                return $candidate;
+            }
+
+            $maxStmt = $pdo->prepare(
+                "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(applicant_code, '-', -1) AS UNSIGNED)), 0)
+                 FROM care_jf_applicants WHERE applicant_code LIKE :pattern"
+            );
+            $maxStmt->execute([':pattern' => $prefix . '%']);
+            $realMax = (int)$maxStmt->fetchColumn();
+            $pdo->prepare(
+                "UPDATE care_jf_id_sequences SET last_value = :v WHERE sequence_name = 'applicant_code' AND year_key = :y"
+            )->execute([':v' => $realMax, ':y' => $yearMonth]);
+        }
+        throw new RuntimeException('Unable to generate a unique applicant code after multiple attempts.');
+    } catch (Throwable $e) {
+        if ($ownTransaction) { $pdo->rollBack(); }
+        throw $e;
+    }
 }
 
 /**

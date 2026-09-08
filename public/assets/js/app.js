@@ -16,8 +16,14 @@ function showToast(message, type = 'success') {
   el.className =
     'fixed top-4 right-4 z-[100] max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm font-medium flex items-start gap-2 ' +
     (type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white');
-  el.innerHTML =
-    `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'} mt-0.5"></i><span>${message}</span>`;
+  // Built via DOM APIs rather than innerHTML template interpolation so a
+  // future caller passing a non-literal (e.g. server- or user-derived)
+  // message can never be interpreted as HTML.
+  const icon = document.createElement('i');
+  icon.className = 'fa-solid ' + (type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation') + ' mt-0.5';
+  const span = document.createElement('span');
+  span.textContent = message;
+  el.append(icon, span);
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 4000);
 }

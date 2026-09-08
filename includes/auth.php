@@ -19,6 +19,24 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/csrf.php';
 
+// --- Security headers, applied on every request that includes this file ---
+// A full Content-Security-Policy is deliberately NOT set here: Alpine.js
+// (used on every page for modals, x-show, @click, etc.) evaluates its
+// directive expressions via the Function() constructor, which requires
+// 'unsafe-eval' in script-src — getting a CSP wrong would silently break
+// every dynamic UI element app-wide, and verifying one across every page
+// is beyond what this pass can safely cover. The headers below carry no
+// such risk: none change how the app itself already behaves.
+if (!headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    // Only the QR "Scan / Look Up Applicant" feature needs the camera
+    // (navigator.mediaDevices.getUserMedia); everything else here is
+    // unused by this app and safe to deny outright.
+    header("Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()");
+}
+
 const SESSION_IDLE_TIMEOUT = 1800; // 30 minutes
 const REAUTH_WINDOW = 900; // 15 minutes — how long a password re-confirmation stays valid
 
@@ -196,15 +214,64 @@ function is_last_active_admin(PDO $pdo, int $userId): bool
 }
 
 /**
+ * Is the given throttle identifier currently locked out?
+ */
+function throttle_locked(PDO $pdo, string $identifier): bool
+{
+    $stmt = $pdo->prepare("SELECT locked_until FROM care_jf_login_throttle WHERE identifier = :id");
+    $stmt->execute([':id' => $identifier]);
+    $lockedUntil = $stmt->fetchColumn();
+    return $lockedUntil && strtotime($lockedUntil) > time();
+}
+
+/**
+ * Record a failed attempt against a throttle identifier, locking it out
+ * for $lockSeconds once $maxAttempts consecutive failures are reached.
+ * A row whose previous lock has already expired starts its counter over
+ * rather than compounding indefinitely.
+ *
+ * MySQL evaluates an UPDATE's SET/ON DUPLICATE KEY UPDATE assignments
+ * left to right within the same row, so the locked_until expression
+ * below sees attempt_count's newly-written value, not its old one.
+ */
+function throttle_record_failure(PDO $pdo, string $identifier, int $maxAttempts, int $lockSeconds): void
+{
+    $pdo->prepare(
+        "INSERT INTO care_jf_login_throttle (identifier, attempt_count, locked_until)
+         VALUES (:id, 1, NULL)
+         ON DUPLICATE KEY UPDATE
+           attempt_count = IF(locked_until IS NOT NULL AND locked_until <= NOW(), 1, attempt_count + 1),
+           locked_until = IF(attempt_count >= :max, DATE_ADD(NOW(), INTERVAL :lock SECOND), locked_until)"
+    )->execute([':id' => $identifier, ':max' => $maxAttempts, ':lock' => $lockSeconds]);
+}
+
+/** Clear a throttle identifier's counter (called after a successful login). */
+function throttle_reset(PDO $pdo, string $identifier): void
+{
+    $pdo->prepare("DELETE FROM care_jf_login_throttle WHERE identifier = :id")->execute([':id' => $identifier]);
+}
+
+/**
  * Attempt to authenticate a user. Returns true on success.
- * Applies a simple rate limit via session to slow brute-force attempts.
+ *
+ * Rate-limited via care_jf_login_throttle (database-backed, not
+ * session-backed) — a session-only counter resets to zero for any
+ * request that doesn't carry a prior session cookie, which made the
+ * previous implementation trivially bypassable by simply not reusing
+ * cookies between attempts. Two independent identifiers are throttled:
+ * the submitted username (protects one account against brute force
+ * regardless of source) and the client IP (slows down username
+ * enumeration/spraying across many accounts from one source). The IP
+ * threshold is deliberately higher than the per-username one so a
+ * shared office/NAT connection with several legitimate users isn't
+ * easily locked out by ordinary mistyped-password traffic.
  */
 function attempt_login(PDO $pdo, string $username, string $password): bool
 {
-    $_SESSION['login_attempts'] = $_SESSION['login_attempts'] ?? 0;
-    $_SESSION['login_locked_until'] = $_SESSION['login_locked_until'] ?? 0;
+    $ipIdentifier = 'ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $userIdentifier = 'user:' . mb_strtolower($username, 'UTF-8');
 
-    if (time() < $_SESSION['login_locked_until']) {
+    if (throttle_locked($pdo, $ipIdentifier) || throttle_locked($pdo, $userIdentifier)) {
         return false;
     }
 
@@ -232,16 +299,21 @@ function attempt_login(PDO $pdo, string $username, string $password): bool
         $_SESSION['full_name']  = $user['full_name'];
         $_SESSION['role']       = $user['role'];
         $_SESSION['last_activity'] = time();
-        $_SESSION['login_attempts'] = 0;
+
+        throttle_reset($pdo, $ipIdentifier);
+        throttle_reset($pdo, $userIdentifier);
 
         audit_log($pdo, $user['id'], 'LOGIN', 'care_jf_users', $user['id'], 'User logged in');
         return true;
     }
 
-    $_SESSION['login_attempts']++;
-    if ($_SESSION['login_attempts'] >= 5) {
-        $_SESSION['login_locked_until'] = time() + 60; // 60s lockout after 5 failed attempts
-        $_SESSION['login_attempts'] = 0;
+    // Always throttle the source IP. Only throttle the username
+    // identifier when it corresponds to a real account — otherwise an
+    // attacker could flood the table with rows for arbitrary
+    // nonexistent usernames.
+    throttle_record_failure($pdo, $ipIdentifier, 20, 300);
+    if ($user) {
+        throttle_record_failure($pdo, $userIdentifier, 5, 60);
     }
 
     return false;

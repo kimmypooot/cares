@@ -1,0 +1,37 @@
+# =====================================================================
+# Defense-in-depth for local/XAMPP-style deployments where Apache's
+# DocumentRoot is the generic htdocs folder rather than this project's
+# public/ subfolder (see README: "Point your web server document root
+# at /public"). Without a dedicated vhost, everything under this
+# project directory is otherwise reachable over HTTP.
+#
+# Confirmed exploitable before this fix: database/database.sql,
+# database/backups/*.sql (contains password hashes + applicant PII),
+# config/database.php, includes/*.php, and .git/ internals were all
+# directly downloadable, and Apache's default "Options Indexes" served
+# a browsable directory listing of database/.
+#
+# The directory-specific .htaccess files (database/, includes/,
+# config/, resources/, node_modules/, .git/) deny access outright.
+# This root file adds a project-wide fallback: no directory listings,
+# and no dotfiles or backup/dump/log/config extensions served directly,
+# in case a sensitive file is ever added somewhere not already covered.
+#
+# For a production deployment, point the vhost's DocumentRoot at
+# public/ directly (per README) — that is the primary fix; this file
+# is a safety net, not a substitute for it.
+# =====================================================================
+
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(sql|bak|old|backup|log|env|ini|json|lock|md)$)">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(sql|bak|old|backup|log|env|ini|json|lock|md)$)">
+        Order deny,allow
+        Deny from all
+    </FilesMatch>
+</IfModule>
