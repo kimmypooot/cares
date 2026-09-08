@@ -252,12 +252,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $users = $pdo->query("SELECT * FROM care_jf_users WHERE role <> 'Partner Agency' ORDER BY created_at DESC")->fetchAll();
 $agencyAccounts = $pdo->query(
-    "SELECT u.id, u.username, u.status AS account_status, u.created_at,
+    "SELECT u.id, u.username, u.full_name, u.is_primary, u.status AS account_status, u.created_at,
             pa.agency_name, pa.contact_person, pa.contact_no, pa.email, pa.status AS agency_status, pa.employer_id
      FROM care_jf_users u
      JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
      WHERE u.role = 'Partner Agency'
-     ORDER BY u.created_at DESC"
+     ORDER BY pa.agency_name ASC, u.is_primary DESC, u.created_at ASC"
 )->fetchAll();
 $initialTab = ($_GET['tab'] ?? '') === 'partner-agencies' ? 'partner-agencies' : 'users';
 
@@ -295,6 +295,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
         <tr>
           <th class="px-4 py-2.5 text-left">Agency Name</th>
+          <th class="px-4 py-2.5 text-left">Full Name</th>
           <th class="px-4 py-2.5 text-left">Employer ID</th>
           <th class="px-4 py-2.5 text-left">Contact Person</th>
           <th class="px-4 py-2.5 text-left">Contact No</th>
@@ -307,13 +308,17 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </thead>
       <tbody class="divide-y divide-slate-100">
         <?php if (!$agencyAccounts): ?>
-          <tr><td colspan="9" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
+          <tr><td colspan="10" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
         <?php endif; ?>
         <?php foreach ($agencyAccounts as $a):
           $statusColors = ['Pending' => 'bg-amber-100 text-amber-800', 'Active' => 'bg-green-100 text-green-700', 'Disabled' => 'bg-gray-100 text-gray-600'];
         ?>
         <tr>
           <td class="px-4 py-2.5 font-medium" data-label="Agency"><?= e($a['agency_name']) ?></td>
+          <td class="px-4 py-2.5" data-label="Full Name">
+            <?= e($a['full_name']) ?>
+            <?php if ($a['is_primary']): ?><span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-700">Primary</span><?php endif; ?>
+          </td>
           <td class="px-4 py-2.5 font-mono text-xs" data-label="Employer ID"><?= e($a['employer_id'] ?: '—') ?></td>
           <td class="px-4 py-2.5" data-label="Contact Person"><?= e($a['contact_person'] ?: '—') ?></td>
           <td class="px-4 py-2.5" data-label="Contact No"><?= e($a['contact_no'] ?: '—') ?></td>
@@ -360,7 +365,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </tr>
         <!-- Inline reset password row -->
         <tr x-show="resettingAgencyId === <?= (int)$a['id'] ?>" x-cloak>
-          <td colspan="9" class="px-4 py-4 bg-slate-50">
+          <td colspan="10" class="px-4 py-4 bg-slate-50">
             <form method="POST" class="flex flex-wrap items-end gap-3" onsubmit="return validateForm(this);">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="reset_password">

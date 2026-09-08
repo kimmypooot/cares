@@ -107,8 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
             $agencyId = (int)$pdo->lastInsertId();
 
             $stmt = $pdo->prepare(
-                "INSERT INTO care_jf_users (username, password, full_name, role, status, is_active, agency_id)
-                 VALUES (:u, :p, :f, 'Partner Agency', 'Pending', 0, :aid)"
+                "INSERT INTO care_jf_users (username, password, full_name, role, status, is_active, agency_id, is_primary)
+                 VALUES (:u, :p, :f, 'Partner Agency', 'Pending', 0, :aid, 1)"
             );
             $stmt->execute([
                 ':u' => $regOld['username'],
