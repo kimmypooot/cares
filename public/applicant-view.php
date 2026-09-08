@@ -5,15 +5,33 @@ require_login();
 
 $pdo = Database::getConnection();
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+$code = clean($_GET['code'] ?? '');
 
-$stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE id = :id AND is_deleted = 0");
-$stmt->execute([':id' => $id]);
-$applicant = $stmt->fetch();
+// Two ways to land on this page: the numeric id (every existing link
+// in the app) or the applicant code (the QR scan / manual-entry lookup
+// — see docs/superpowers/specs/2026-09-08-applicant-qr-code-design.md
+// §6). id wins if both are somehow present. $id is normalized from the
+// fetched row right below, so every POST handler and query further
+// down this same file behaves identically regardless of which lookup
+// path was used to land here.
+if ($id > 0) {
+    $stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE id = :id AND is_deleted = 0");
+    $stmt->execute([':id' => $id]);
+    $applicant = $stmt->fetch();
+} elseif ($code !== '') {
+    $stmt = $pdo->prepare("SELECT * FROM care_jf_applicants WHERE applicant_code = :code AND is_deleted = 0");
+    $stmt->execute([':code' => $code]);
+    $applicant = $stmt->fetch();
+} else {
+    $applicant = false;
+}
 
 if (!$applicant) {
     flash_set('error', 'Applicant not found.');
     redirect('applicants.php');
 }
+
+$id = (int)$applicant['id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -146,6 +164,19 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <button type="button" data-confirm-delete="<?= e(full_name($applicant)) ?>" class="px-3 py-2 rounded-lg border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50"><i class="fa-solid fa-trash mr-1"></i> Delete</button>
       </form>
       <?php endif; ?>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-6 flex items-center gap-4">
+    <canvas id="applicantQrCanvas" x-data x-init="renderApplicantQr($el, <?= json_encode($applicant['applicant_code']) ?>)"
+            class="rounded-lg border border-slate-200 shrink-0"></canvas>
+    <div>
+      <p class="text-xs text-slate-500 uppercase tracking-wide">Applicant QR Code</p>
+      <p class="text-xs text-slate-400 mb-2">Scan this code for a quick lookup, or present it when following up with the office.</p>
+      <button type="button" onclick="downloadQrPng(document.getElementById('applicantQrCanvas'), <?= json_encode($applicant['applicant_code'] . '-qr.png') ?>)"
+              class="print:hidden px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium hover:bg-slate-50">
+        <i class="fa-solid fa-download mr-1"></i> Download QR
+      </button>
     </div>
   </div>
 
