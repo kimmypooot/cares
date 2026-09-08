@@ -18,7 +18,7 @@ $flash = flash_get();
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= e($pageTitle) ?> · CARE</title>
 <link rel="icon" type="image/png" href="assets/images/csc-logo.png">
-<link rel="stylesheet" href="assets/css/app.build.css">
+<link rel="stylesheet" href="assets/css/app.build.css<?= asset_version('assets/css/app.build.css') ?>">
 <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
 <script defer src="assets/vendor/qrcode-generator/qrcode.js"></script>
 <script defer src="assets/vendor/jsqr/jsQR.js"></script>

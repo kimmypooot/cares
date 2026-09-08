@@ -136,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login · CARE</title>
 <link rel="icon" type="image/png" href="assets/images/csc-logo.png">
-<link rel="stylesheet" href="assets/css/app.build.css">
+<link rel="stylesheet" href="assets/css/app.build.css<?= asset_version('assets/css/app.build.css') ?>">
 <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
 <script defer src="assets/vendor/alpine/alpine.min.js"></script>
 </head>
@@ -307,6 +307,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
     </div>
   </div>
 </div>
-<script src="assets/js/app.js"></script>
+<script src="assets/js/app.js<?= asset_version('assets/js/app.js') ?>"></script>
 </body>
 </html>

@@ -19,6 +19,24 @@ function clean(?string $value): string
     return trim(strip_tags($value ?? ''));
 }
 
+/**
+ * Cache-busting query string ("?v=<mtime>") for one of this app's own
+ * first-party static assets (public/assets/css/app.build.css,
+ * public/assets/js/app.js) — these change with every deploy, but their
+ * <link>/<script> tags carry no other cache-busting signal, so a
+ * browser that already cached an old copy keeps serving it forever.
+ * $relativePath is relative to public/, e.g. 'assets/js/app.js'.
+ * Not used for vendored third-party libraries — those are pinned and
+ * only ever change via the documented, deliberate vendoring-refresh
+ * process, so long-lived caching there is desired, not a bug.
+ */
+function asset_version(string $relativePath): string
+{
+    $fullPath = __DIR__ . '/../public/' . ltrim($relativePath, '/');
+    $mtime = @filemtime($fullPath);
+    return $mtime !== false ? '?v=' . $mtime : '';
+}
+
 /** Redirect and stop execution. */
 function redirect(string $path): void
 {
