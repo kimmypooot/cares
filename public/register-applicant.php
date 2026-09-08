@@ -152,8 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
      x-transition.opacity
      class="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4"
      @keydown.escape.window="showSuccess = false">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 sm:p-8 text-center relative"
-       @click.outside="showSuccess = false">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 sm:p-8 text-center relative">
     <button @click="showSuccess = false" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600" aria-label="Close">
       <i class="fa-solid fa-xmark"></i>
     </button>

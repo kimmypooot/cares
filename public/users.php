@@ -272,7 +272,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <h1 class="text-2xl font-bold text-slate-800">Manage Users</h1>
       <p class="text-sm text-slate-500">Manage login accounts, role-based permissions, and Partner Agency approvals.</p>
     </div>
-    <button x-show="tab === 'users'" @click="showCreate = !showCreate" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
+    <button x-show="tab === 'users'" @click="showCreate = true" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
       <i class="fa-solid fa-user-plus"></i> New User
     </button>
   </div>
@@ -381,40 +381,49 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
   <div x-show="tab === 'users'" x-cloak>
 
-  <!-- Create form: field order = Full Name, Username, Temporary Password, Role -->
-  <div x-show="showCreate" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-    <form method="POST" onsubmit="return validateForm(this);">
-      <?= csrf_field() ?>
-      <input type="hidden" name="action" value="create">
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Full Name <span class="text-red-500">*</span></label>
-          <input type="text" name="full_name" required class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-          <p class="text-xs text-red-500 mt-1 <?= empty($errors['full_name']) ? 'hidden' : '' ?>" data-error-for="full_name"><?= e($errors['full_name'] ?? '') ?></p>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Username <span class="text-red-500">*</span></label>
-          <input type="text" name="username" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-          <p class="text-xs text-red-500 mt-1 <?= empty($errors['username']) ? 'hidden' : '' ?>" data-error-for="username"><?= e($errors['username'] ?? '') ?></p>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Temporary Password <span class="text-red-500">*</span></label>
-          <input type="password" name="password" required minlength="8" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-          <p class="text-xs text-red-500 mt-1 <?= empty($errors['password']) ? 'hidden' : '' ?>" data-error-for="password"><?= e($errors['password'] ?? '') ?></p>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Role <span class="text-red-500">*</span></label>
-          <select name="role" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <option value="Administrator">Administrator</option>
-            <option value="Employee">Employee</option>
-            <option value="Viewer">Viewer</option>
-          </select>
-        </div>
+  <!-- Create form: real modal, does not close on outside click. Field order = Full Name, Username, Temporary Password, Role -->
+  <div x-show="showCreate" x-cloak
+       class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4"
+       @keydown.escape.window="showCreate = false">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">New User</h2>
+        <button type="button" @click="showCreate = false" class="text-slate-400 hover:text-slate-600" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="flex justify-end gap-2 mt-4">
-        <button type="submit" class="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">Create User</button>
-      </div>
-    </form>
+      <form method="POST" onsubmit="return validateForm(this);">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="create">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Full Name <span class="text-red-500">*</span></label>
+            <input type="text" name="full_name" required class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <p class="text-xs text-red-500 mt-1 <?= empty($errors['full_name']) ? 'hidden' : '' ?>" data-error-for="full_name"><?= e($errors['full_name'] ?? '') ?></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Username <span class="text-red-500">*</span></label>
+            <input type="text" name="username" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <p class="text-xs text-red-500 mt-1 <?= empty($errors['username']) ? 'hidden' : '' ?>" data-error-for="username"><?= e($errors['username'] ?? '') ?></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Temporary Password <span class="text-red-500">*</span></label>
+            <input type="password" name="password" required minlength="8" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <p class="text-xs text-red-500 mt-1 <?= empty($errors['password']) ? 'hidden' : '' ?>" data-error-for="password"><?= e($errors['password'] ?? '') ?></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Role <span class="text-red-500">*</span></label>
+            <select name="role" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option value="Administrator">Administrator</option>
+              <option value="Employee">Employee</option>
+              <option value="Viewer">Viewer</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" @click="showCreate = false" class="px-5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">Create User</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">

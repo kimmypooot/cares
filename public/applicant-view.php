@@ -466,7 +466,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
 
         <div x-show="showTagForReview" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
-          <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="showTagForReview = false">
+          <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
             <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-flag text-emerald-600 mr-1"></i> Tag for Review</h3>
             <form method="POST">
               <?= csrf_field() ?>
@@ -558,7 +558,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                     </form>
 
                     <div x-show="confirmHireRecordId === <?= (int)$rec['id'] ?>" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
-                      <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-left" @click.outside="confirmHireRecordId = null">
+                      <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-left">
                         <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-circle-question text-emerald-600 mr-1"></i> Confirm Hire</h3>
                         <p class="text-sm text-slate-600 mb-3">Confirm <?= e(full_name($applicant)) ?> as hired by <strong><?= e($rec['agency_display_name']) ?></strong>?</p>
                         <form method="POST">

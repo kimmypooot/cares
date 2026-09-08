@@ -9,8 +9,9 @@ if (!can_manage_employment() && !is_partner_agency()) {
 }
 
 $pdo = Database::getConnection();
-$jobLevels = ['Level 1', 'Level 2', 'Level 3', 'Job Order - Level 1', 'Job Order - Level 2', 'COS - Level 1', 'COS - Level 2'];
+$jobLevels = ['Plantilla Level 1', 'Plantilla Level 2', 'Job Order', 'COS'];
 $statusOptions = ['Active', 'Disabled', 'Filled', 'Closed'];
+$addStatusOptions = ['Active' => 'Active', 'Disabled' => 'Inactive'];
 $scopedAgencyId = is_partner_agency() ? current_agency_id($pdo) : null;
 
 if (is_partner_agency() && !$scopedAgencyId) {
@@ -162,23 +163,40 @@ $vacancies = $stmt->fetchAll();
 
 $agencyOptions = can_manage_employment() ? active_agencies($pdo) : [];
 
+// Print summary: all vacancies grouped by agency (Admin/Employee only —
+// a Partner Agency's own list is already scoped to a single agency).
+$vacanciesByAgency = [];
+if ($scopedAgencyId === null) {
+    foreach ($vacancies as $v) {
+        $vacanciesByAgency[$v['agency_name']][] = $v;
+    }
+    ksort($vacanciesByAgency);
+}
+
 $pageTitle = 'Job Vacancies';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
 <div class="space-y-5" x-data="{ showCreate: false, editingId: null }">
-  <div class="flex items-center justify-between flex-wrap gap-3">
+  <div class="flex items-center justify-between flex-wrap gap-3 print:hidden">
     <div>
       <h1 class="text-2xl font-bold text-slate-800">Job Vacancies</h1>
       <p class="text-sm text-slate-500"><?= $scopedAgencyId !== null ? 'Manage your agency\'s job openings.' : 'Manage job openings across all Partner Agencies.' ?></p>
     </div>
-    <button type="button" @click="showCreate = !showCreate" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
-      <i class="fa-solid fa-plus"></i> Add Vacancy
-    </button>
+    <div class="flex gap-2 flex-wrap">
+      <?php if ($scopedAgencyId === null): ?>
+      <button type="button" onclick="window.print()" class="inline-flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg">
+        <i class="fa-solid fa-print"></i> Print
+      </button>
+      <?php endif; ?>
+      <button type="button" @click="showCreate = true" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
+        <i class="fa-solid fa-plus"></i> Add Vacancy
+      </button>
+    </div>
   </div>
 
-  <form method="GET" class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-wrap gap-3">
+  <form method="GET" class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-wrap gap-3 print:hidden">
     <input type="text" name="search" value="<?= e($search) ?>" placeholder="Search position or title..." class="flex-1 min-w-[200px] rounded-lg border border-slate-300 text-sm py-2 px-3">
     <select name="status" class="rounded-lg border border-slate-300 text-sm py-2 px-3">
       <option value="All" <?= $statusFilter==='All'?'selected':'' ?>>All Status</option>
@@ -190,69 +208,112 @@ require_once __DIR__ . '/../includes/sidebar.php';
     <a href="vacancies.php" class="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">Reset</a>
   </form>
 
-  <!-- Add form -->
-  <div x-show="showCreate" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-    <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-4">Add Vacancy</h2>
-    <form method="POST" onsubmit="return validateForm(this) && confirm('Save this job vacancy?');">
-      <?= csrf_field() ?>
-      <input type="hidden" name="action" value="add">
-      <div class="grid sm:grid-cols-2 gap-4">
-        <?php if (can_manage_employment()): ?>
-        <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
-          <select name="agency_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <option value="">Select a Partner Agency</option>
-            <?php foreach ($agencyOptions as $ag): ?>
-              <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <?php endif; ?>
-        <div class="sm:col-span-2">
-          <label class="block text-sm font-medium text-slate-700 mb-1">Title</label>
-          <input type="text" name="title" value="Job Available" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Position <span class="text-red-500">*</span></label>
-          <input type="text" name="position" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Job Level <span class="text-red-500">*</span></label>
-          <select name="job_level" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <option value="">Select</option>
-            <?php foreach ($jobLevels as $lvl): ?>
-              <option><?= e($lvl) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Salary/Pay Grade</label>
-          <input type="text" name="salary_grade" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Occupational Option</label>
-          <input type="text" name="occupational_option" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">No. of Vacant Positions <span class="text-red-500">*</span></label>
-          <input type="number" name="vacant_count" value="1" min="1" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
-          <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <?php foreach ($statusOptions as $opt): ?>
-              <option><?= e($opt) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
+  <!-- Add form: real modal, does not close on outside click -->
+  <div x-show="showCreate" x-cloak
+       class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4"
+       @keydown.escape.window="showCreate = false">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Add Vacancy</h2>
+        <button type="button" @click="showCreate = false" class="text-slate-400 hover:text-slate-600" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="flex justify-end gap-2 mt-4">
-        <button type="submit" class="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">Save Vacancy</button>
-      </div>
-    </form>
+      <form method="POST" onsubmit="return validateForm(this) && confirm('Save this job vacancy?');">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="add">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <?php if (can_manage_employment()): ?>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
+            <select name="agency_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Select a Partner Agency</option>
+              <?php foreach ($agencyOptions as $ag): ?>
+                <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <?php endif; ?>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Position <span class="text-red-500">*</span></label>
+            <input type="text" name="position" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Salary Grade / Pay Grade</label>
+            <input type="text" name="salary_grade" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Job Level <span class="text-red-500">*</span></label>
+            <select name="job_level" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Select</option>
+              <?php foreach ($jobLevels as $lvl): ?>
+                <option><?= e($lvl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">No. of Vacancies <span class="text-red-500">*</span></label>
+            <input type="number" name="vacant_count" value="1" min="1" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Position Status</label>
+            <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <?php foreach ($addStatusOptions as $value => $label): ?>
+                <option value="<?= e($value) ?>"><?= e($label) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" @click="showCreate = false" class="px-5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">Save Vacancy</button>
+        </div>
+      </form>
+    </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+  <?php if ($scopedAgencyId === null): ?>
+  <!-- Print-only summary: grouped by agency. Hidden on screen, shown only when printing. -->
+  <div class="hidden print:block">
+    <div class="text-center px-5 pt-6 pb-4">
+      <img src="assets/images/csc-logo.png" alt="CSC Logo" width="64" height="64" class="h-16 w-16 object-contain mx-auto mb-2">
+      <p class="text-lg font-bold text-slate-900 uppercase tracking-wide">Civil Service Commission RO VIII</p>
+      <p class="text-base font-semibold text-slate-800 mt-1">Job Vacancies Summary — By Partner Agency</p>
+      <p class="text-xs text-slate-500 mt-1">Printed on <?= date('F j, Y g:i A') ?></p>
+      <hr class="mt-4 border-slate-300">
+    </div>
+    <?php if (!$vacanciesByAgency): ?>
+      <p class="text-center text-slate-400 py-6">No job vacancies found.</p>
+    <?php endif; ?>
+    <?php foreach ($vacanciesByAgency as $agencyName => $agencyVacancies): ?>
+      <div class="px-5 py-3">
+        <h3 class="text-sm font-bold text-slate-800 uppercase mb-2"><?= e($agencyName) ?></h3>
+        <table class="min-w-full text-xs border border-slate-300 mb-4">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Position</th>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Job Level</th>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Salary Grade</th>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Vacant</th>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($agencyVacancies as $av): ?>
+              <tr>
+                <td class="px-2 py-1.5 border border-slate-300"><?= e($av['position']) ?></td>
+                <td class="px-2 py-1.5 border border-slate-300"><?= e($av['job_level']) ?></td>
+                <td class="px-2 py-1.5 border border-slate-300"><?= e($av['salary_grade'] ?: '—') ?></td>
+                <td class="px-2 py-1.5 border border-slate-300"><?= (int)$av['vacant_count'] ?></td>
+                <td class="px-2 py-1.5 border border-slate-300"><?= e($av['status']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
+  <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden print:hidden">
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm responsive-cards">
         <thead class="bg-slate-50 text-slate-600 text-xs uppercase">

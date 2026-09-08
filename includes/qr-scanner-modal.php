@@ -16,7 +16,7 @@
   <div x-show="open" x-cloak x-transition.opacity
        class="fixed inset-0 bg-black/40 z-[95] flex items-center justify-center p-4"
        @keydown.escape.window="closeModal()">
-    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="closeModal()">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold text-slate-800"><i class="fa-solid fa-qrcode text-brand-600 mr-1"></i> Scan / Look Up Applicant</h3>
         <button type="button" @click="closeModal()" class="text-slate-400 hover:text-slate-600" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>

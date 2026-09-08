@@ -191,7 +191,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
     <!-- Confirmation modal -->
     <div x-show="confirming" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
-      <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" @click.outside="confirming=false">
+      <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
         <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-circle-question text-brand-600 mr-1"></i> Confirm Registration</h3>
         <p class="text-sm text-slate-600 mb-5">Save this applicant's information? Please review the details before confirming.</p>
         <div class="flex justify-end gap-2">
