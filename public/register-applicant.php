@@ -142,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <link rel="stylesheet" href="assets/css/app.build.css">
 <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
 <script defer src="assets/vendor/alpine/alpine.min.js"></script>
+<script src="assets/vendor/qrcode-generator/qrcode.js"></script>
 </head>
 <body class="min-h-screen" style="background: radial-gradient(circle at top, #1e2a5e 0%, #0f172a 70%); background-repeat: no-repeat; background-attachment: fixed; background-size: cover;" x-data="{ showSuccess: <?= $success ? 'true' : 'false' ?>, showPrivacy: <?= (!empty($errors) || $success) ? 'false' : 'true' ?> }">
 
@@ -163,6 +164,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="text-xs text-slate-500 uppercase tracking-wide">Your Applicant ID</p>
       <p class="text-2xl font-bold text-brand-700"><?= e($applicantCode) ?></p>
     </div>
+    <?php if ($applicantCode): ?>
+    <div class="mt-4 flex flex-col items-center">
+      <canvas id="regQrCanvas" x-init="renderApplicantQr($el, <?= e(json_encode($applicantCode)) ?>)"
+              class="rounded-lg border border-slate-200"></canvas>
+      <button type="button" onclick="downloadQrPng(document.getElementById('regQrCanvas'), <?= e(json_encode($applicantCode . '-qr.png')) ?>)"
+              class="mt-2 text-xs font-medium text-brand-600 hover:text-brand-800">
+        <i class="fa-solid fa-download mr-1"></i> Download QR
+      </button>
+    </div>
+    <?php endif; ?>
     <p class="text-xs text-slate-500 mt-3">Please keep this ID for your reference. You may present it when following up with the office.</p>
     <button @click="showSuccess = false; showPrivacy = true" class="mt-5 w-full px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
       Register Another Applicant
