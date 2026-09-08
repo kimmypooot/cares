@@ -198,20 +198,19 @@ function qrScanner() {
       this._stream = stream;
       try {
         const video = this.$refs.qrVideo;
-        video.srcObject = this._stream;
+        video.srcObject = stream;
         await video.play();
         if (generation !== this._generation) {
-          this._stream.getTracks().forEach((track) => track.stop());
-          this._stream = null;
+          stream.getTracks().forEach((track) => track.stop());
           return;
         }
         this.cameraActive = true;
         this._scanLoop();
       } catch (err) {
-        this.cameraError = 'Camera access was denied or unavailable. Use manual entry below.';
-        this.cameraActive = false;
-        if (this._stream) {
-          this._stream.getTracks().forEach((track) => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
+        if (generation === this._generation) {
+          this.cameraError = 'Camera access was denied or unavailable. Use manual entry below.';
+          this.cameraActive = false;
           this._stream = null;
         }
       }
