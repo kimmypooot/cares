@@ -23,8 +23,8 @@ $currentEmployment = $curStmt->fetch();
 $errors = [];
 $old = $applicant;
 
-$educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
-$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+$educLevelOptions = ['High School/Senior High Level', 'Technical/Vocational', 'College Level', 'Postgraduate (Master/Doctorate)'];
+$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'RA 1080', 'Other Eligibility'];
 
 $old['extension_name'] = $old['extension_name'] ?: 'NONE';
 $old['employment_status_flag'] = $currentEmployment ? 'Employed' : 'Not Yet';
@@ -97,9 +97,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors['educational_level'] = 'Please select an educational level.';
     }
 
-    if (!in_array($old['completion_status'], ['Not Graduate', 'Graduate'], true)) {
+    if (!in_array($old['completion_status'], ['Not Graduated', 'Graduated'], true)) {
         $errors['completion_status'] = 'Please select completion status.';
-    } elseif ($old['completion_status'] === 'Not Graduate') {
+    } elseif ($old['completion_status'] === 'Not Graduated') {
         if ($old['highest_year_level_units'] === '') {
             $errors['highest_year_level_units'] = 'Highest year/level/units earned is required.';
         }
@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($old['eligibility_type'], $eligibilityTypeOptions, true)) {
             $errors['eligibility_type'] = 'Please select an eligibility type.';
         }
-        if ($old['eligibility_type'] === 'Other') {
+        if ($old['eligibility_type'] === 'Other Eligibility') {
             if ($old['other_eligibility_type'] === '') {
                 $errors['other_eligibility_type'] = 'Please specify the other eligibility type.';
             } elseif (mb_strlen($old['other_eligibility_type']) > 150) {
@@ -388,36 +388,36 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Completion <span class="text-red-500">*</span></label>
           <div class="flex gap-4">
-            <label class="flex items-center gap-2 text-sm"><input type="radio" name="completion_status" value="Not Graduate" x-model="completion" <?= ($old['completion_status'] ?? '')==='Not Graduate'?'checked':'' ?> required> Not Graduate</label>
-            <label class="flex items-center gap-2 text-sm"><input type="radio" name="completion_status" value="Graduate" x-model="completion" <?= ($old['completion_status'] ?? '')==='Graduate'?'checked':'' ?>> Graduate</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="completion_status" value="Not Graduated" x-model="completion" <?= ($old['completion_status'] ?? '')==='Not Graduated'?'checked':'' ?> required> Not Graduated</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="completion_status" value="Graduated" x-model="completion" <?= ($old['completion_status'] ?? '')==='Graduated'?'checked':'' ?>> Graduated</label>
           </div>
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['completion_status']) ? 'hidden' : '' ?>" data-error-for="completion_status"><?= e($errors['completion_status'] ?? '') ?></p>
         </div>
 
-        <div x-show="completion === 'Not Graduate'" x-cloak :data-conditional-hidden="completion !== 'Not Graduate' ? '1' : null" class="sm:col-span-2">
+        <div x-show="completion === 'Not Graduated'" x-cloak :data-conditional-hidden="completion !== 'Not Graduated' ? '1' : null" class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Highest Year/Level/Units Earned <span class="text-red-500">*</span></label>
-          <input type="text" name="highest_year_level_units" :required="completion === 'Not Graduate'" placeholder="e.g. Grade 12, 3rd Year College, 72 Units" value="<?= e($old['highest_year_level_units'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="highest_year_level_units" :required="completion === 'Not Graduated'" placeholder="e.g. Grade 12, 3rd Year College, 72 Units" value="<?= e($old['highest_year_level_units'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['highest_year_level_units']) ? 'hidden' : '' ?>" data-error-for="highest_year_level_units"><?= e($errors['highest_year_level_units'] ?? '') ?></p>
         </div>
 
-        <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
+        <div x-show="completion === 'Graduated'" x-cloak :data-conditional-hidden="completion !== 'Graduated' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">Date Graduated <span class="text-red-500">*</span></label>
-          <input type="date" name="date_graduated" :required="completion === 'Graduate'" max="<?= date('Y-m-d') ?>" value="<?= e($old['date_graduated'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="date" name="date_graduated" :required="completion === 'Graduated'" max="<?= date('Y-m-d') ?>" value="<?= e($old['date_graduated'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['date_graduated']) ? 'hidden' : '' ?>" data-error-for="date_graduated"><?= e($errors['date_graduated'] ?? '') ?></p>
         </div>
-        <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
+        <div x-show="completion === 'Graduated'" x-cloak :data-conditional-hidden="completion !== 'Graduated' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">Complete Title of Course/Degree <span class="text-red-500">*</span></label>
-          <input type="text" name="course_degree" :required="completion === 'Graduate'" value="<?= e($old['course_degree'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="course_degree" :required="completion === 'Graduated'" value="<?= e($old['course_degree'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['course_degree']) ? 'hidden' : '' ?>" data-error-for="course_degree"><?= e($errors['course_degree'] ?? '') ?></p>
         </div>
-        <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
+        <div x-show="completion === 'Graduated'" x-cloak :data-conditional-hidden="completion !== 'Graduated' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">Name of School <span class="text-red-500">*</span></label>
-          <input type="text" name="school_name" :required="completion === 'Graduate'" value="<?= e($old['school_name'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="school_name" :required="completion === 'Graduated'" value="<?= e($old['school_name'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['school_name']) ? 'hidden' : '' ?>" data-error-for="school_name"><?= e($errors['school_name'] ?? '') ?></p>
         </div>
-        <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
+        <div x-show="completion === 'Graduated'" x-cloak :data-conditional-hidden="completion !== 'Graduated' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">School Address <span class="text-red-500">*</span></label>
-          <textarea name="school_address" :required="completion === 'Graduate'" rows="2" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['school_address'] ?? '') ?></textarea>
+          <textarea name="school_address" :required="completion === 'Graduated'" rows="2" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><?= e($old['school_address'] ?? '') ?></textarea>
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['school_address']) ? 'hidden' : '' ?>" data-error-for="school_address"><?= e($errors['school_address'] ?? '') ?></p>
         </div>
       </div>
@@ -446,9 +446,9 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['eligibility_type']) ? 'hidden' : '' ?>" data-error-for="eligibility_type"><?= e($errors['eligibility_type'] ?? '') ?></p>
         </div>
 
-        <div x-show="eligibility === 'Eligible' && eligType === 'Other'" x-cloak :data-conditional-hidden="!(eligibility === 'Eligible' && eligType === 'Other') ? '1' : null" class="sm:col-span-2">
+        <div x-show="eligibility === 'Eligible' && eligType === 'Other Eligibility'" x-cloak :data-conditional-hidden="!(eligibility === 'Eligible' && eligType === 'Other Eligibility') ? '1' : null" class="sm:col-span-2">
           <label class="block text-sm font-medium text-slate-700 mb-1">Other Eligibility Type <span class="text-red-500">*</span></label>
-          <input type="text" name="other_eligibility_type" :required="eligibility === 'Eligible' && eligType === 'Other'" maxlength="150" value="<?= e($old['other_eligibility_type'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="other_eligibility_type" :required="eligibility === 'Eligible' && eligType === 'Other Eligibility'" maxlength="150" value="<?= e($old['other_eligibility_type'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['other_eligibility_type']) ? 'hidden' : '' ?>" data-error-for="other_eligibility_type"><?= e($errors['other_eligibility_type'] ?? '') ?></p>
         </div>
       </div>
