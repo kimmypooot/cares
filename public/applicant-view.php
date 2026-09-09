@@ -97,6 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
         }
 
+        if (is_applicant_hired($pdo, $id)) {
+            flash_set('error', 'This applicant has already been hired.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
         // Agency identity is always server-derived for a Partner Agency —
         // never trusted from the request. Administrator/Employee explicitly
         // choose which agency to tag on behalf of.
