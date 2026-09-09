@@ -129,12 +129,18 @@ Claude-Session: https://claude.ai/code/session_01Pd4rekTEFdJSppKSPtG1LF"
 
 - [ ] **Step 1: Add the option-list constants and read+normalize the new POST fields**
 
-Find this block near the top of the file (inside `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ...`), right after the existing `foreach ($old as $key => $_) { $old[$key] = clean($_POST[$key] ?? ''); }` and the `service_job_seeker`/`service_agency_services` boolean reads, but BEFORE the "Normalize to uppercase server-side too" block. Insert:
+**Placement matters here — read this carefully.** The two option-list arrays (`$educLevelOptions`, `$eligibilityTypeOptions`) are consumed BOTH by the validation logic (inside the `if (POST)` block) AND by the `<select>` dropdowns in the always-rendered template further down the file (rendered on every page load, GET or POST). If you declare them only inside the `if (POST)` block, every plain GET request — i.e. every first-time visitor, and the page reload after a successful redirect — leaves both arrays undefined, and both `<select>` elements render with no options at all except the empty placeholder, making Educational Level and Eligibility Type impossible to select in a real browser. **Declare both arrays where `$old = [ 'last_name' => '', ... ];` is declared, ABOVE the `if ($_SERVER['REQUEST_METHOD'] === 'POST')` line — not inside it.** Add:
 
 ```php
-    $educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
-    $eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+$educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
+$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+```
 
+right next to (immediately before or after) the existing `$old = [...]` array declaration, at the top level of the file (not indented inside any `if` block).
+
+Then, separately, find this block near the top of the file (inside `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ...`), right after the existing `foreach ($old as $key => $_) { $old[$key] = clean($_POST[$key] ?? ''); }` and the `service_job_seeker`/`service_agency_services` boolean reads, but BEFORE the "Normalize to uppercase server-side too" block. Insert the 10 field reads (note: NOT the two arrays again — those are already declared above the POST block per the instruction above):
+
+```php
     $old['educational_level'] = clean($_POST['educational_level'] ?? '');
     $old['completion_status'] = clean($_POST['completion_status'] ?? '');
     $old['highest_year_level_units'] = clean($_POST['highest_year_level_units'] ?? '');
@@ -448,9 +454,16 @@ Claude-Session: https://claude.ai/code/session_01Pd4rekTEFdJSppKSPtG1LF"
 
 - [ ] **Step 1: Add the option-list constants, `$old` defaults, and POST field reads**
 
-Near the top of the file, find where `$old` is initialized (an array with `'last_name' => '', 'first_name' => '', ...` etc. — read the current file to find its exact current key list) and add the same 10 keys as Task 2 Step 2 to it.
+**Placement matters — read this carefully (an earlier task on this same plan shipped this exact mistake and had to be fixed).** `$educLevelOptions` and `$eligibilityTypeOptions` are consumed both by validation (inside the `if (POST)` block) and by the `<select>` dropdowns in the always-rendered template (rendered on every page load, GET or POST). Declare BOTH arrays where `$old` is initialized, ABOVE the `if ($_SERVER['REQUEST_METHOD'] === 'POST')` line — NOT inside it. If declared only inside the POST block, every plain GET page load (every first visit) renders both `<select>` elements with no options at all, making the fields impossible to select in a browser.
 
-Inside the `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ... }` block, find where existing fields are read via `clean($_POST[...] ?? '')` and add the same reads as Task 2 Step 1 (the `$educLevelOptions`/`$eligibilityTypeOptions` constants and the 10 `$old[...]` assignments — identical to Task 2 Step 1). This file's existing uppercase-normalization loop is `foreach (['last_name', 'first_name', 'middle_name', 'address'] as $upperKey)` (no `place_of_birth` here, since this page has no such field) — extend it to also include `'school_name'` and `'school_address'`:
+Near the top of the file, find where `$old` is initialized (an array with `'last_name' => '', 'first_name' => '', ...` etc. — read the current file to find its exact current key list). Add the same 10 keys as Task 2 Step 2 to it, AND add the two option-list array declarations (identical to Task 2 Step 1's corrected placement) right next to it, both at the top level of the file, not indented inside any `if` block:
+
+```php
+$educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
+$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+```
+
+Inside the `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ... }` block, find where existing fields are read via `clean($_POST[...] ?? '')` and add the same 10 `$old[...] = clean($_POST[...] ?? '')` reads as Task 2 Step 1 (do NOT declare the two arrays again here — they're already declared above the POST block per the instruction above). This file's existing uppercase-normalization loop is `foreach (['last_name', 'first_name', 'middle_name', 'address'] as $upperKey)` (no `place_of_birth` here, since this page has no such field) — extend it to also include `'school_name'` and `'school_address'`:
 ```php
     foreach (['last_name', 'first_name', 'middle_name', 'address', 'school_name', 'school_address'] as $upperKey) {
         $old[$upperKey] = mb_strtoupper($old[$upperKey], 'UTF-8');
@@ -571,7 +584,14 @@ Claude-Session: https://claude.ai/code/session_01Pd4rekTEFdJSppKSPtG1LF"
 
 - [ ] **Step 1: Add the option-list constants and POST field reads**
 
-Inside `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ... }`, find the existing `foreach (['last_name','first_name','middle_name','extension_name','sex','date_of_birth','place_of_birth','contact_number','email_address','address','civil_status'] as $key) { $old[$key] = clean($_POST[$key] ?? ''); }` loop. Immediately after it, add the same `$educLevelOptions`/`$eligibilityTypeOptions` constants and 10 `$old[...] = clean($_POST[...] ?? '')` reads from Task 2 Step 1 (identical code).
+**Placement matters — read this carefully (an earlier task on this same plan shipped this exact mistake and had to be fixed).** `$educLevelOptions` and `$eligibilityTypeOptions` are consumed both by validation (inside the `if (POST)` block) and by the `<select>` dropdowns in the always-rendered template. Declare BOTH arrays at the top level of the file, ABOVE the `if ($_SERVER['REQUEST_METHOD'] === 'POST')` line — a good spot is right after `$old = $applicant;` near the top of the file. If declared only inside the POST block, every plain GET page load (i.e. every time this Edit page is opened, since editing always starts with a GET) renders both `<select>` elements with no options at all:
+
+```php
+$educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
+$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+```
+
+Inside `if ($_SERVER['REQUEST_METHOD'] === 'POST') { csrf_require(); ... }`, find the existing `foreach (['last_name','first_name','middle_name','extension_name','sex','date_of_birth','place_of_birth','contact_number','email_address','address','civil_status'] as $key) { $old[$key] = clean($_POST[$key] ?? ''); }` loop. Immediately after it, add the same 10 `$old[...] = clean($_POST[...] ?? '')` reads from Task 2 Step 1 (do NOT declare the two arrays again here — they're already declared above the POST block per the instruction above).
 
 Extend the existing uppercase loop `foreach (['last_name', 'first_name', 'middle_name', 'place_of_birth', 'address'] as $upperKey)` to also include `'school_name'` and `'school_address'`:
 ```php
