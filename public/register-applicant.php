@@ -356,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   <?php endif; ?>
 
-  <form method="POST" x-data="{ completion: '<?= e($old['completion_status']) ?>', eligibility: '<?= e($old['eligibility_status']) ?>', eligType: '<?= e($old['eligibility_type']) ?>' }"
+  <form method="POST" x-data="{ completion: <?= e(json_encode($old['completion_status'])) ?>, eligibility: <?= e(json_encode($old['eligibility_status'])) ?>, eligType: <?= e(json_encode($old['eligibility_type'])) ?> }"
         @submit="if (!validateForm($el)) { $event.preventDefault(); }">
     <?= csrf_field() ?>
 

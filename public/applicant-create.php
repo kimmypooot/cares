@@ -192,7 +192,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
   <?php endif; ?>
 
-  <form method="POST" id="registerForm" x-data="{ confirming: false, completion: '<?= e($old['completion_status']) ?>', eligibility: '<?= e($old['eligibility_status']) ?>', eligType: '<?= e($old['eligibility_type']) ?>' }"
+  <form method="POST" id="registerForm" x-data="{ confirming: false, completion: <?= e(json_encode($old['completion_status'])) ?>, eligibility: <?= e(json_encode($old['eligibility_status'])) ?>, eligType: <?= e(json_encode($old['eligibility_type'])) ?> }"
         @submit="if (!validateForm($el)) { $event.preventDefault(); } else if (!confirming) { $event.preventDefault(); confirming = true; }">
     <?= csrf_field() ?>
 

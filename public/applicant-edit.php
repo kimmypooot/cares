@@ -288,7 +288,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
     </div>
   <?php endif; ?>
 
-  <form method="POST" x-data="{ employmentFlag: '<?= e($old['employment_status_flag']) ?>', agencySel: '<?= $old['agency_id'] !== '' ? (int)$old['agency_id'] : '' ?>', completion: '<?= e($old['completion_status'] ?? '') ?>', eligibility: '<?= e($old['eligibility_status'] ?? '') ?>', eligType: '<?= e($old['eligibility_type'] ?? '') ?>' }"
+  <form method="POST" x-data="{ employmentFlag: <?= e(json_encode($old['employment_status_flag'])) ?>, agencySel: '<?= $old['agency_id'] !== '' ? (int)$old['agency_id'] : '' ?>', completion: <?= e(json_encode($old['completion_status'] ?? '')) ?>, eligibility: <?= e(json_encode($old['eligibility_status'] ?? '')) ?>, eligType: <?= e(json_encode($old['eligibility_type'] ?? '')) ?> }"
         @submit="if (!validateForm($el)) { $event.preventDefault(); } else if (!confirm('Save changes to this applicant record?')) { $event.preventDefault(); }">
     <?= csrf_field() ?>
     <input type="hidden" name="id" value="<?= (int)$id ?>">

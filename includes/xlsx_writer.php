@@ -99,7 +99,7 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
         foreach ($row as $colIndex => $value) {
             $cellRef = xlsx_col_letter($colIndex + 1) . $r;
             $text = $value === null ? '' : (string)$value;
-            $xml .= '<c r="' . $cellRef . '" t="inlineStr"><is><t xml:space="preserve">' . xlsx_escape($text) . '</t></is></c>';
+            $xml .= '<c r="' . $cellRef . '" t="inlineStr"><is><t xml:space="preserve">' . xlsx_escape(xlsx_neutralize_formula($text)) . '</t></is></c>';
         }
         $xml .= '</row>';
     }
@@ -120,6 +120,26 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
 function xlsx_escape(string $text): string
 {
     return htmlspecialchars($text, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
+
+/**
+ * Neutralize spreadsheet formula injection (CSV/Excel formula injection,
+ * CWE-1236): a cell value that starts with =, +, -, @, or a tab/CR is
+ * interpreted by Excel/LibreOffice/Sheets as a formula when the file is
+ * opened, not as literal text. Report exports include free-text fields
+ * that ultimately originate from the public, unauthenticated applicant
+ * self-registration form (public/register-applicant.php) — e.g. a
+ * first/last name of `=HYPERLINK("http://evil/x","x")` — so this can't be
+ * assumed safe just because it's "our own data". Prefixing with a single
+ * quote is the standard mitigation: it forces the leading character to be
+ * read as literal text while keeping the displayed value unchanged.
+ */
+function xlsx_neutralize_formula(string $text): string
+{
+    if ($text !== '' && strpbrk($text[0], "=+-@\t\r") !== false) {
+        return "'" . $text;
+    }
+    return $text;
 }
 
 /** Convert a 1-based column index to its spreadsheet letter (1 -> A, 27 -> AA). */
