@@ -28,21 +28,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old['service_job_seeker'] = isset($_POST['service_job_seeker']);
     $old['service_agency_services'] = isset($_POST['service_agency_services']);
 
-    $old['educational_level'] = clean($_POST['educational_level'] ?? '');
-    $old['completion_status'] = clean($_POST['completion_status'] ?? '');
-    $old['highest_year_level_units'] = clean($_POST['highest_year_level_units'] ?? '');
-    $old['date_graduated'] = clean($_POST['date_graduated'] ?? '');
-    $old['course_degree'] = clean($_POST['course_degree'] ?? '');
-    $old['school_name'] = clean($_POST['school_name'] ?? '');
-    $old['school_address'] = clean($_POST['school_address'] ?? '');
-    $old['eligibility_status'] = clean($_POST['eligibility_status'] ?? '');
-    $old['eligibility_type'] = clean($_POST['eligibility_type'] ?? '');
+    // The generic foreach above already read the other 9 new fields
+    // (they're part of $old's defaults) — other_eligibility_type is the
+    // only one that needs a different transform (uppercase + trim, not
+    // just clean()), so it's the only one re-read here.
     $old['other_eligibility_type'] = mb_strtoupper(trim(clean($_POST['other_eligibility_type'] ?? '')), 'UTF-8');
 
     // Normalize to uppercase server-side too — defense in depth in case
     // JavaScript is disabled or the form is submitted directly (e.g. via
     // API). Email is deliberately excluded (kept as typed).
-    foreach (['last_name', 'first_name', 'middle_name', 'address', 'place_of_birth', 'school_name', 'school_address'] as $upperKey) {
+    foreach (['last_name', 'first_name', 'middle_name', 'address', 'place_of_birth', 'course_degree', 'school_name', 'school_address'] as $upperKey) {
         $old[$upperKey] = mb_strtoupper($old[$upperKey], 'UTF-8');
     }
 
@@ -487,7 +482,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">Complete Title of Course/Degree <span class="text-red-500">*</span></label>
-          <input type="text" name="course_degree" :required="completion === 'Graduate'" value="<?= e($old['course_degree']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="course_degree" :required="completion === 'Graduate'" value="<?= e($old['course_degree']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['course_degree']) ? 'hidden' : '' ?>" data-error-for="course_degree"><?= e($errors['course_degree'] ?? '') ?></p>
         </div>
         <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">

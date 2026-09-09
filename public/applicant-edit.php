@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Normalize to uppercase server-side too — defense in depth. Email is
     // deliberately excluded (kept as typed).
-    foreach (['last_name', 'first_name', 'middle_name', 'place_of_birth', 'address', 'school_name', 'school_address'] as $upperKey) {
+    foreach (['last_name', 'first_name', 'middle_name', 'place_of_birth', 'address', 'course_degree', 'school_name', 'school_address'] as $upperKey) {
         $old[$upperKey] = mb_strtoupper($old[$upperKey], 'UTF-8');
     }
     $old['service_job_seeker'] = isset($_POST['service_job_seeker']);
@@ -407,7 +407,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
         <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
           <label class="block text-sm font-medium text-slate-700 mb-1">Complete Title of Course/Degree <span class="text-red-500">*</span></label>
-          <input type="text" name="course_degree" :required="completion === 'Graduate'" value="<?= e($old['course_degree'] ?? '') ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <input type="text" name="course_degree" :required="completion === 'Graduate'" value="<?= e($old['course_degree'] ?? '') ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
           <p class="text-xs text-red-500 mt-1 <?= empty($errors['course_degree']) ? 'hidden' : '' ?>" data-error-for="course_degree"><?= e($errors['course_degree'] ?? '') ?></p>
         </div>
         <div x-show="completion === 'Graduate'" x-cloak :data-conditional-hidden="completion !== 'Graduate' ? '1' : null">
