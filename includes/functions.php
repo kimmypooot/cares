@@ -293,6 +293,57 @@ function is_applicant_hired(PDO $pdo, int $applicantId): bool
     return (int)$stmt->fetchColumn() > 0;
 }
 
+/**
+ * Associates an applicant with a Partner Agency by inserting a 'For
+ * Review' employment record, reusing the exact duplicate-prevention
+ * and hired-applicant guard the manual "Tag for Review" flow already
+ * used. $source is 'manual' (the existing button) or 'qr_scan' (QR
+ * auto-tag) — it only changes which audit action string is recorded.
+ */
+function tag_applicant_for_agency(
+    PDO $pdo, int $applicantId, string $applicantCode,
+    int $agencyId, int $actingUserId, string $source
+): string {
+    if (is_applicant_hired($pdo, $applicantId)) {
+        return 'already_hired';
+    }
+
+    $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id AND status = 'Active'");
+    $agStmt->execute([':id' => $agencyId]);
+    $agencyRow = $agStmt->fetch();
+    if (!$agencyRow) {
+        return 'agency_invalid';
+    }
+
+    // No duplicate concurrent tags from the same agency — re-tagging is
+    // fine once a prior tag has moved to Withdrawn/Superseded/Hired,
+    // since none of those match this check.
+    $dupStmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND agency_id = :agid AND employment_status = 'For Review'"
+    );
+    $dupStmt->execute([':id' => $applicantId, ':agid' => $agencyId]);
+    if ((int)$dupStmt->fetchColumn() > 0) {
+        return 'duplicate';
+    }
+
+    $tagStmt = $pdo->prepare(
+        "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
+         VALUES (:aid, :agid, :agency, :address, NULL, 'For Review', 0, 'Active')"
+    );
+    $tagStmt->execute([
+        ':aid' => $applicantId, ':agid' => $agencyId,
+        ':agency' => $agencyRow['agency_name'], ':address' => $agencyRow['address'],
+    ]);
+    $newReviewId = (int)$pdo->lastInsertId();
+
+    $actionCode = $source === 'qr_scan' ? 'APPLICANT_AUTO_TAGGED_QR' : 'APPLICANT_TAGGED_FOR_REVIEW';
+    $verb = $source === 'qr_scan' ? 'auto-tagged via QR scan by' : 'tagged For Review by';
+    audit_log($pdo, $actingUserId, $actionCode, 'care_jf_employment_records', $newReviewId,
+        "Applicant {$applicantCode} {$verb} {$agencyRow['agency_name']}");
+
+    return 'created';
+}
+
 /** Basic email validation. */
 function is_valid_email(string $email): bool
 {

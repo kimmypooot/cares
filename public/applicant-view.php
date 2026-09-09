@@ -97,11 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
         }
 
-        if (is_applicant_hired($pdo, $id)) {
-            flash_set('error', 'This applicant has already been hired.');
-            redirect('applicant-view.php?id=' . $id);
-        }
-
         // Agency identity is always server-derived for a Partner Agency —
         // never trusted from the request. Administrator/Employee explicitly
         // choose which agency to tag on behalf of.
@@ -116,38 +111,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('applicant-view.php?id=' . $id);
         }
 
-        $agStmt = $pdo->prepare("SELECT agency_name, address FROM care_jf_partner_agencies WHERE id = :id AND status = 'Active'");
-        $agStmt->execute([':id' => $reviewAgencyId]);
-        $reviewAgencyRow = $agStmt->fetch();
-        if (!$reviewAgencyRow) {
-            flash_set('error', 'Selected Partner Agency was not found.');
-            redirect('applicant-view.php?id=' . $id);
-        }
-
-        // No duplicate concurrent tags from the same agency — re-tagging is
-        // fine once a prior tag has moved to Withdrawn/Superseded/Hired,
-        // since none of those match this check.
-        $dupStmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM care_jf_employment_records WHERE applicant_id = :id AND agency_id = :agid AND employment_status = 'For Review'"
+        $tagResult = tag_applicant_for_agency(
+            $pdo, $id, $applicant['applicant_code'], $reviewAgencyId, (int)current_user()['id'], 'manual'
         );
-        $dupStmt->execute([':id' => $id, ':agid' => $reviewAgencyId]);
-        if ((int)$dupStmt->fetchColumn() > 0) {
-            flash_set('error', 'This agency has already tagged this applicant for review.');
-            redirect('applicant-view.php?id=' . $id);
-        }
 
-        $tagStmt = $pdo->prepare(
-            "INSERT INTO care_jf_employment_records (applicant_id, agency_id, agency_company_name, agency_company_address, date_hired, employment_status, is_current, status)
-             VALUES (:aid, :agid, :agency, :address, NULL, 'For Review', 0, 'Active')"
-        );
-        $tagStmt->execute([
-            ':aid' => $id, ':agid' => $reviewAgencyId,
-            ':agency' => $reviewAgencyRow['agency_name'], ':address' => $reviewAgencyRow['address'],
-        ]);
-        $newReviewId = (int)$pdo->lastInsertId();
-        audit_log($pdo, (int)current_user()['id'], 'APPLICANT_TAGGED_FOR_REVIEW', 'care_jf_employment_records', $newReviewId,
-            "Applicant {$applicant['applicant_code']} tagged For Review by {$reviewAgencyRow['agency_name']}");
-        flash_set('success', 'Applicant tagged for review.');
+        $tagResultMessages = [
+            'already_hired' => ['error', 'This applicant has already been hired.'],
+            'agency_invalid' => ['error', 'Selected Partner Agency was not found.'],
+            'duplicate' => ['error', 'This agency has already tagged this applicant for review.'],
+            'created' => ['success', 'Applicant tagged for review.'],
+        ];
+        [$flashType, $flashMessage] = $tagResultMessages[$tagResult];
+        flash_set($flashType, $flashMessage);
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'confirm_hired') {
         if (!can_manage_employment() && !is_partner_agency()) {
