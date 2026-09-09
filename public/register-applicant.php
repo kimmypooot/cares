@@ -16,6 +16,9 @@ $old = [
     'eligibility_status' => '', 'eligibility_type' => '', 'other_eligibility_type' => '',
 ];
 
+$educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
+$eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
 
@@ -24,9 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $old['service_job_seeker'] = isset($_POST['service_job_seeker']);
     $old['service_agency_services'] = isset($_POST['service_agency_services']);
-
-    $educLevelOptions = ['High School/Senior High School Graduate', 'Technical/Vocational', 'College Graduate', 'Postgraduate (Master/Doctorate)'];
-    $eligibilityTypeOptions = ['Civil Service Professional', 'Civil Service Subprofessional', 'Civil Service Professional (Preference Rating)', 'Civil Service Subprofessional (Preference Rating)', 'Basic Competency on Local Treasury', 'Barangay Official', 'Honor Graduate Eligibility', 'Fire Officer', 'Penology Officer', 'Skills Eligibility (MC 11)', 'Other'];
 
     $old['educational_level'] = clean($_POST['educational_level'] ?? '');
     $old['completion_status'] = clean($_POST['completion_status'] ?? '');
