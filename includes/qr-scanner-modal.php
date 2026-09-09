@@ -20,7 +20,7 @@
 
   <div x-show="open" x-cloak x-transition.opacity
        class="fixed inset-0 bg-black/40 z-[95] flex items-center justify-center p-4"
-       @keydown.escape.window="closeModal()">
+       @keydown.escape.window="showConfirmTag ? cancelConfirmTag() : (open && closeModal())">
     <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold text-slate-800"><i class="fa-solid fa-qrcode text-brand-600 mr-1"></i> Scan / Look Up Applicant</h3>
@@ -54,14 +54,13 @@
   </div>
 
   <div x-show="showConfirmTag" x-cloak x-transition.opacity
-       class="fixed inset-0 bg-black/40 z-[96] flex items-center justify-center p-4"
-       @keydown.escape.window="cancelConfirmTag()">
+       class="fixed inset-0 bg-black/40 z-[96] flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
       <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i> Confirm Association</h3>
       <p class="text-sm text-slate-600 mb-4">Associate applicant code <span class="font-semibold" x-text="pendingCode"></span> with your agency?</p>
       <div class="flex justify-end gap-2">
         <button type="button" @click="cancelConfirmTag()" class="px-4 py-2 text-sm rounded-lg border border-slate-300 hover:bg-slate-50">Cancel</button>
-        <button type="button" @click="confirmTag()" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold">Associate</button>
+        <button type="button" @click="confirmTag()" :disabled="tagging" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold">Associate</button>
       </div>
     </div>
   </div>

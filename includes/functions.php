@@ -299,10 +299,17 @@ function is_applicant_hired(PDO $pdo, int $applicantId): bool
  * and hired-applicant guard the manual "Tag for Review" flow already
  * used. $source is 'manual' (the existing button) or 'qr_scan' (QR
  * auto-tag) — it only changes which audit action string is recorded.
+ * $sourceDetail further distinguishes a qr_scan's origin ('camera' or
+ * 'manual' code entry) for the audit description; ignored when $source
+ * isn't 'qr_scan'.
+ *
+ * NOTE: $agencyId is trusted as-is — this function does not verify it
+ * belongs to the acting user. Callers for a Partner Agency user MUST
+ * derive it via current_agency_id(), never from request input.
  */
 function tag_applicant_for_agency(
     PDO $pdo, int $applicantId, string $applicantCode,
-    int $agencyId, int $actingUserId, string $source
+    int $agencyId, int $actingUserId, string $source, string $sourceDetail = ''
 ): string {
     if (is_applicant_hired($pdo, $applicantId)) {
         return 'already_hired';
@@ -337,7 +344,17 @@ function tag_applicant_for_agency(
     $newReviewId = (int)$pdo->lastInsertId();
 
     $actionCode = $source === 'qr_scan' ? 'APPLICANT_AUTO_TAGGED_QR' : 'APPLICANT_TAGGED_FOR_REVIEW';
-    $verb = $source === 'qr_scan' ? 'auto-tagged via QR scan by' : 'tagged For Review by';
+    if ($source === 'qr_scan') {
+        if ($sourceDetail === 'camera') {
+            $verb = 'auto-tagged via QR camera scan by';
+        } elseif ($sourceDetail === 'manual') {
+            $verb = 'auto-tagged via confirmed manual code entry by';
+        } else {
+            $verb = 'auto-tagged via QR scan by';
+        }
+    } else {
+        $verb = 'tagged For Review by';
+    }
     audit_log($pdo, $actingUserId, $actionCode, 'care_jf_employment_records', $newReviewId,
         "Applicant {$applicantCode} {$verb} {$agencyRow['agency_name']}");
 

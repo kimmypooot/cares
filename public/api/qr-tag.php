@@ -17,6 +17,8 @@ if (!is_logged_in()) {
     exit;
 }
 
+// Checked directly (not via require_role()) because require_role() fails
+// with an HTML die() — wrong for a JSON API, which needs a clean JSON 403.
 if (!is_partner_agency()) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'status' => 'forbidden']);
@@ -35,7 +37,9 @@ $pdo = Database::getConnection();
 
 $rawInput = file_get_contents('php://input');
 $jsonInput = $rawInput !== '' ? json_decode($rawInput, true) : null;
-$code = clean((string)(($jsonInput['code'] ?? null) ?? ($_POST['code'] ?? '')));
+$rawCode = ($jsonInput['code'] ?? null) ?? ($_POST['code'] ?? '');
+$code = clean(is_string($rawCode) ? $rawCode : '');
+$via = ($jsonInput['via'] ?? '') === 'manual' ? 'manual' : 'camera';
 
 if ($code === '') {
     echo json_encode(['ok' => false, 'status' => 'not_found']);
@@ -55,12 +59,12 @@ $applicantId = (int)$applicant['id'];
 $agencyId = current_agency_id($pdo);
 
 if (!$agencyId) {
-    echo json_encode(['ok' => false, 'status' => 'agency_invalid']);
+    echo json_encode(['ok' => false, 'status' => 'agency_invalid', 'applicant_id' => $applicantId]);
     exit;
 }
 
 $result = tag_applicant_for_agency(
-    $pdo, $applicantId, $applicant['applicant_code'], $agencyId, (int)current_user()['id'], 'qr_scan'
+    $pdo, $applicantId, $applicant['applicant_code'], $agencyId, (int)current_user()['id'], 'qr_scan', $via
 );
 
 if ($result === 'created') {

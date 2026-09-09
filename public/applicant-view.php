@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'duplicate' => ['error', 'This agency has already tagged this applicant for review.'],
             'created' => ['success', 'Applicant tagged for review.'],
         ];
-        [$flashType, $flashMessage] = $tagResultMessages[$tagResult];
+        [$flashType, $flashMessage] = $tagResultMessages[$tagResult] ?? ['error', 'Could not tag this applicant.'];
         flash_set($flashType, $flashMessage);
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'confirm_hired') {

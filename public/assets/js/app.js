@@ -189,6 +189,7 @@ function qrScanner(options = {}) {
       if (!code) return;
       if (this.isPartnerAgency) {
         this.pendingCode = code;
+        this.lookupError = '';
         this.showConfirmTag = true;
       } else {
         this.navigateToCode(code);
@@ -204,12 +205,13 @@ function qrScanner(options = {}) {
       const code = this.pendingCode;
       this.showConfirmTag = false;
       this.pendingCode = '';
-      this.tagAndNavigate(code);
+      this.tagAndNavigate(code, 'manual');
     },
     navigateToCode(code) {
       window.location.href = 'applicant-view.php?code=' + encodeURIComponent(code);
     },
-    async tagAndNavigate(code) {
+    async tagAndNavigate(code, via) {
+      if (this.tagging) return;
       this.tagging = true;
       this.lookupError = '';
       let response;
@@ -221,7 +223,7 @@ function qrScanner(options = {}) {
             'Content-Type': 'application/json',
             'X-CSRF-Token': tokenMeta ? tokenMeta.getAttribute('content') : '',
           },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, via }),
         });
       } catch (err) {
         this.tagging = false;
@@ -233,7 +235,9 @@ function qrScanner(options = {}) {
       try {
         data = await response.json();
       } catch (err) {
-        data = null;
+        this.tagging = false;
+        this.lookupError = 'Something went wrong. Please try again.';
+        return;
       }
 
       this.tagging = false;
@@ -241,7 +245,11 @@ function qrScanner(options = {}) {
         window.location.href = 'applicant-view.php?id=' + encodeURIComponent(data.applicant_id);
         return;
       }
-      if (data && data.status === 'agency_invalid') {
+      if (response.status === 401) {
+        this.lookupError = 'Your session has expired. Please refresh the page and sign in again.';
+      } else if (response.status === 403) {
+        this.lookupError = 'Your account is not permitted to do this.';
+      } else if (data && data.status === 'agency_invalid') {
         this.lookupError = 'Your Partner Agency account is not currently active. Contact an administrator.';
       } else {
         this.lookupError = 'Applicant not found.';
@@ -302,7 +310,7 @@ function qrScanner(options = {}) {
         if (result && result.data) {
           this.stopCamera();
           if (this.isPartnerAgency) {
-            this.tagAndNavigate(result.data);
+            this.tagAndNavigate(result.data, 'camera');
           } else {
             this.navigateToCode(result.data);
           }
