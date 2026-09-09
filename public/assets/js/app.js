@@ -147,17 +147,28 @@ function downloadQrPng(canvas, filename) {
  * Alpine component backing the shared "Scan / Look Up Applicant" modal
  * (includes/qr-scanner-modal.php), used on dashboard.php and
  * applicants.php. Manual code entry always works; the camera path is
- * only offered when the browser reports getUserMedia support. A
- * successful scan or manual submit navigates straight to
- * applicant-view.php?code=<value>.
+ * only offered when the browser reports getUserMedia support.
+ *
+ * For a Partner Agency account (isPartnerAgency: true), a resolved
+ * code is auto-associated with the logged-in agency before navigating
+ * to the applicant's profile: instantly for a camera decode, behind a
+ * confirm dialog for manual code entry. See
+ * docs/superpowers/specs/2026-09-10-qr-auto-tagging-design.md. For any
+ * other role, behavior is unchanged: navigate straight to
+ * applicant-view.php?code=<value>, no tagging.
  */
-function qrScanner() {
+function qrScanner(options = {}) {
   return {
+    isPartnerAgency: !!options.isPartnerAgency,
     open: false,
     manualCode: '',
     cameraAvailable: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
     cameraActive: false,
     cameraError: '',
+    lookupError: '',
+    tagging: false,
+    showConfirmTag: false,
+    pendingCode: '',
     _stream: null,
     _rafId: null,
     _generation: 0,
@@ -166,19 +177,75 @@ function qrScanner() {
       this.open = true;
       this.manualCode = '';
       this.cameraError = '';
+      this.lookupError = '';
     },
     closeModal() {
       this.stopCamera();
+      this.showConfirmTag = false;
       this.open = false;
     },
     submitManual() {
       const code = this.manualCode.trim();
-      if (code) {
+      if (!code) return;
+      if (this.isPartnerAgency) {
+        this.pendingCode = code;
+        this.showConfirmTag = true;
+      } else {
         this.navigateToCode(code);
       }
     },
+    cancelConfirmTag() {
+      const code = this.pendingCode;
+      this.showConfirmTag = false;
+      this.pendingCode = '';
+      this.navigateToCode(code);
+    },
+    confirmTag() {
+      const code = this.pendingCode;
+      this.showConfirmTag = false;
+      this.pendingCode = '';
+      this.tagAndNavigate(code);
+    },
     navigateToCode(code) {
       window.location.href = 'applicant-view.php?code=' + encodeURIComponent(code);
+    },
+    async tagAndNavigate(code) {
+      this.tagging = true;
+      this.lookupError = '';
+      let response;
+      try {
+        const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        response = await fetch('api/qr-tag.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': tokenMeta ? tokenMeta.getAttribute('content') : '',
+          },
+          body: JSON.stringify({ code }),
+        });
+      } catch (err) {
+        this.tagging = false;
+        this.lookupError = 'Could not reach the server. Please try again.';
+        return;
+      }
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (err) {
+        data = null;
+      }
+
+      this.tagging = false;
+      if (data && data.ok) {
+        window.location.href = 'applicant-view.php?id=' + encodeURIComponent(data.applicant_id);
+        return;
+      }
+      if (data && data.status === 'agency_invalid') {
+        this.lookupError = 'Your Partner Agency account is not currently active. Contact an administrator.';
+      } else {
+        this.lookupError = 'Applicant not found.';
+      }
     },
     async startCamera() {
       if (!this.cameraAvailable) return;
@@ -234,7 +301,11 @@ function qrScanner() {
         const result = jsQR(imageData.data, imageData.width, imageData.height);
         if (result && result.data) {
           this.stopCamera();
-          this.navigateToCode(result.data);
+          if (this.isPartnerAgency) {
+            this.tagAndNavigate(result.data);
+          } else {
+            this.navigateToCode(result.data);
+          }
           return;
         }
       }
