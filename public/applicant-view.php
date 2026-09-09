@@ -471,6 +471,43 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </dl>
       </div>
 
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-4">Educational Attainment</h2>
+        <?php if (empty($applicant['educational_level'])): ?>
+          <p class="text-sm text-slate-400">No educational attainment information on file.</p>
+        <?php else: ?>
+        <dl class="grid sm:grid-cols-2 gap-4 text-sm">
+          <div><dt class="text-slate-500">Educational Level</dt><dd class="font-medium text-slate-800"><?= e($applicant['educational_level']) ?></dd></div>
+          <div><dt class="text-slate-500">Completion</dt><dd class="font-medium text-slate-800"><?= e($applicant['completion_status'] ?: '—') ?></dd></div>
+          <?php if ($applicant['completion_status'] === 'Not Graduate' && !empty($applicant['highest_year_level_units'])): ?>
+            <div class="sm:col-span-2"><dt class="text-slate-500">Highest Year/Level/Units Earned</dt><dd class="font-medium text-slate-800"><?= e($applicant['highest_year_level_units']) ?></dd></div>
+          <?php elseif ($applicant['completion_status'] === 'Graduate'): ?>
+            <div><dt class="text-slate-500">Date Graduated</dt><dd class="font-medium text-slate-800"><?= $applicant['date_graduated'] ? format_date($applicant['date_graduated']) : '—' ?></dd></div>
+            <div><dt class="text-slate-500">Complete Title of Course/Degree</dt><dd class="font-medium text-slate-800"><?= e($applicant['course_degree'] ?: '—') ?></dd></div>
+            <div><dt class="text-slate-500">Name of School</dt><dd class="font-medium text-slate-800"><?= e($applicant['school_name'] ?: '—') ?></dd></div>
+            <div><dt class="text-slate-500">School Address</dt><dd class="font-medium text-slate-800"><?= e($applicant['school_address'] ?: '—') ?></dd></div>
+          <?php endif; ?>
+        </dl>
+        <?php endif; ?>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-4">Eligibility</h2>
+        <?php if (empty($applicant['eligibility_status'])): ?>
+          <p class="text-sm text-slate-400">No eligibility information on file.</p>
+        <?php else: ?>
+        <dl class="grid sm:grid-cols-2 gap-4 text-sm">
+          <div><dt class="text-slate-500">Eligibility Status</dt><dd class="font-medium text-slate-800"><?= e($applicant['eligibility_status']) ?></dd></div>
+          <?php if ($applicant['eligibility_status'] === 'Eligible' && !empty($applicant['eligibility_type'])): ?>
+            <div><dt class="text-slate-500">Eligibility Type</dt><dd class="font-medium text-slate-800"><?= e($applicant['eligibility_type']) ?></dd></div>
+            <?php if ($applicant['eligibility_type'] === 'Other' && !empty($applicant['other_eligibility_type'])): ?>
+              <div><dt class="text-slate-500">Other Eligibility Type</dt><dd class="font-medium text-slate-800"><?= e($applicant['other_eligibility_type']) ?></dd></div>
+            <?php endif; ?>
+          <?php endif; ?>
+        </dl>
+        <?php endif; ?>
+      </div>
+
       <?php
         $canTagAsPartnerAgency = is_partner_agency() && !$myOpenReview && !$applicantIsHired;
         $canTagAsStaff = can_manage_employment() && $tagAgencyOptions && !$applicantIsHired;
