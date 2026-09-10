@@ -68,27 +68,16 @@ if (!$agencyId) {
 
 $actingUserId = (int)current_user()['id'];
 $results = [];
-$flashParts = [];
 
 if ($applicant['service_job_seeker']) {
     $results['employment'] = tag_applicant_for_agency(
         $pdo, $applicantId, $applicant['applicant_code'], $agencyId, $actingUserId, 'qr_scan', $via
     );
-    if ($results['employment'] === 'created') {
-        $flashParts[] = 'tagged for review';
-    } elseif ($results['employment'] === 'duplicate') {
-        $flashParts[] = 'already associated with your agency';
-    }
 }
 if ($applicant['service_agency_services']) {
     $results['service'] = tag_applicant_for_service(
         $pdo, $applicantId, $applicant['applicant_code'], $agencyId, $actingUserId, 'qr_scan', $via
     );
-    if ($results['service'] === 'created') {
-        $flashParts[] = 'service availed logged with your agency';
-    } elseif ($results['service'] === 'duplicate') {
-        $flashParts[] = 'service availment already on file with your agency';
-    }
 }
 
 // agency_invalid is identical for both calls (same $agencyId every time) —
@@ -100,8 +89,35 @@ if ($anyAgencyInvalid) {
     exit;
 }
 
-if ($flashParts) {
-    flash_set('success', 'Applicant ' . implode(' and ', $flashParts) . '.');
+$onlyEmployment = isset($results['employment']) && !isset($results['service']);
+
+if ($onlyEmployment) {
+    // Byte-for-byte identical to this endpoint's pre-existing behavior —
+    // the only branch combination that has real prior production text.
+    if ($results['employment'] === 'created') {
+        flash_set('success', 'Applicant successfully associated with your agency.');
+    } elseif ($results['employment'] === 'duplicate') {
+        flash_set('success', 'Applicant is already associated with your agency.');
+    }
+} else {
+    $flashParts = [];
+    if (isset($results['employment'])) {
+        if ($results['employment'] === 'created') {
+            $flashParts[] = 'tagged for review';
+        } elseif ($results['employment'] === 'duplicate') {
+            $flashParts[] = 'already associated with your agency';
+        }
+    }
+    if (isset($results['service'])) {
+        if ($results['service'] === 'created') {
+            $flashParts[] = 'service availed logged with your agency';
+        } elseif ($results['service'] === 'duplicate') {
+            $flashParts[] = 'service availment already on file with your agency';
+        }
+    }
+    if ($flashParts) {
+        flash_set('success', 'Applicant ' . implode(' and ', $flashParts) . '.');
+    }
 }
 
 echo json_encode(array_merge(
