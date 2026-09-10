@@ -20,6 +20,7 @@ $search = clean($_GET['search'] ?? '');
 $sex = clean($_GET['sex'] ?? '');
 $civilStatus = clean($_GET['civil_status'] ?? '');
 $employmentStatus = clean($_GET['employment_status'] ?? '');
+$service = clean($_GET['service'] ?? '');
 $dateFrom = clean($_GET['date_from'] ?? '');
 $dateTo = clean($_GET['date_to'] ?? '');
 $sortCol = clean($_GET['sort'] ?? 'created_at');
@@ -69,6 +70,11 @@ if (is_partner_agency()) {
     $where[] = '(er.id IS NULL OR er.agency_id = :my_agency_id)';
     $params[':my_agency_id'] = current_agency_id($pdo);
 }
+if ($service === 'job_seeker') {
+    $where[] = 'a.service_job_seeker = 1';
+} elseif ($service === 'agency_services') {
+    $where[] = 'a.service_agency_services = 1';
+}
 
 $whereSql = implode(' AND ', $where);
 
@@ -112,7 +118,7 @@ $data = array_map(function ($row) {
     $status = $row['current_status'] ?: 'For Further Review';
     $services = [];
     if ($row['service_job_seeker']) $services[] = 'Job Seeker';
-    if ($row['service_agency_services']) $services[] = 'Agency Services';
+    if ($row['service_agency_services']) $services[] = 'Avail Agency Services';
     return [
         'id'                => (int)$row['id'],
         'applicant_code'    => $row['applicant_code'],
