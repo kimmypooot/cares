@@ -49,49 +49,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($old['first_name'] === '') $errors['first_name'] = 'Given name is required.';
     if ($old['address'] === '')    $errors['address'] = 'Complete address is required.';
 
-    if (!in_array($old['educational_level'], $educLevelOptions, true)) {
-        $errors['educational_level'] = 'Please select an educational level.';
-    }
+    // Educational Attainment and Eligibility are only required when
+    // registering as a Job Seeker — an Avail-Agency-Service-only
+    // registrant can still optionally fill them in (nothing below
+    // clears $old for these fields when Job Seeker is unchecked), they
+    // just aren't validated or required.
+    if ($old['service_job_seeker']) {
+        if (!in_array($old['educational_level'], $educLevelOptions, true)) {
+            $errors['educational_level'] = 'Please select an educational level.';
+        }
 
-    if (!in_array($old['completion_status'], ['Not Graduated', 'Graduated'], true)) {
-        $errors['completion_status'] = 'Please select completion status.';
-    } elseif ($old['completion_status'] === 'Not Graduated') {
-        if ($old['highest_year_level_units'] === '') {
-            $errors['highest_year_level_units'] = 'Highest year/level/units earned is required.';
-        }
-        $old['date_graduated'] = '';
-        $old['course_degree'] = '';
-        $old['school_name'] = '';
-        $old['school_address'] = '';
-    } else {
-        if ($old['date_graduated'] === '' || !strtotime($old['date_graduated'])) {
-            $errors['date_graduated'] = 'A valid graduation date is required.';
-        } elseif (strtotime($old['date_graduated']) > time()) {
-            $errors['date_graduated'] = 'Date graduated cannot be in the future.';
-        }
-        if ($old['course_degree'] === '') $errors['course_degree'] = 'Complete title of course/degree is required.';
-        if ($old['school_name'] === '') $errors['school_name'] = 'Name of school is required.';
-        if ($old['school_address'] === '') $errors['school_address'] = 'School address is required.';
-        $old['highest_year_level_units'] = '';
-    }
-
-    if (!in_array($old['eligibility_status'], ['Eligible', 'Not Eligible'], true)) {
-        $errors['eligibility_status'] = 'Please select eligibility status.';
-    } elseif ($old['eligibility_status'] === 'Not Eligible') {
-        $old['eligibility_type'] = '';
-        $old['other_eligibility_type'] = '';
-    } else {
-        if (!in_array($old['eligibility_type'], $eligibilityTypeOptions, true)) {
-            $errors['eligibility_type'] = 'Please select an eligibility type.';
-        }
-        if ($old['eligibility_type'] === 'Other Eligibility') {
-            if ($old['other_eligibility_type'] === '') {
-                $errors['other_eligibility_type'] = 'Please specify the other eligibility type.';
-            } elseif (mb_strlen($old['other_eligibility_type']) > 150) {
-                $errors['other_eligibility_type'] = 'Other eligibility type must be 150 characters or fewer.';
+        if (!in_array($old['completion_status'], ['Not Graduated', 'Graduated'], true)) {
+            $errors['completion_status'] = 'Please select completion status.';
+        } elseif ($old['completion_status'] === 'Not Graduated') {
+            if ($old['highest_year_level_units'] === '') {
+                $errors['highest_year_level_units'] = 'Highest year/level/units earned is required.';
             }
+            $old['date_graduated'] = '';
+            $old['course_degree'] = '';
+            $old['school_name'] = '';
+            $old['school_address'] = '';
         } else {
+            if ($old['date_graduated'] === '' || !strtotime($old['date_graduated'])) {
+                $errors['date_graduated'] = 'A valid graduation date is required.';
+            } elseif (strtotime($old['date_graduated']) > time()) {
+                $errors['date_graduated'] = 'Date graduated cannot be in the future.';
+            }
+            if ($old['course_degree'] === '') $errors['course_degree'] = 'Complete title of course/degree is required.';
+            if ($old['school_name'] === '') $errors['school_name'] = 'Name of school is required.';
+            if ($old['school_address'] === '') $errors['school_address'] = 'School address is required.';
+            $old['highest_year_level_units'] = '';
+        }
+
+        if (!in_array($old['eligibility_status'], ['Eligible', 'Not Eligible'], true)) {
+            $errors['eligibility_status'] = 'Please select eligibility status.';
+        } elseif ($old['eligibility_status'] === 'Not Eligible') {
+            $old['eligibility_type'] = '';
             $old['other_eligibility_type'] = '';
+        } else {
+            if (!in_array($old['eligibility_type'], $eligibilityTypeOptions, true)) {
+                $errors['eligibility_type'] = 'Please select an eligibility type.';
+            }
+            if ($old['eligibility_type'] === 'Other Eligibility') {
+                if ($old['other_eligibility_type'] === '') {
+                    $errors['other_eligibility_type'] = 'Please specify the other eligibility type.';
+                } elseif (mb_strlen($old['other_eligibility_type']) > 150) {
+                    $errors['other_eligibility_type'] = 'Other eligibility type must be 150 characters or fewer.';
+                }
+            } else {
+                $old['other_eligibility_type'] = '';
+            }
         }
     }
 
@@ -370,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" name="service_agency_services" value="1" <?= $old['service_agency_services'] ? 'checked' : '' ?> class="rounded border-slate-300">
-          Agency Services
+          Avail Agency Services
         </label>
       </div>
       <p class="text-xs text-red-500 mt-2 <?= empty($errors['services_availed']) ? 'hidden' : '' ?>"><?= e($errors['services_availed'] ?? '') ?></p>
