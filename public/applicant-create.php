@@ -11,6 +11,7 @@ $old = [
     'educational_level' => '', 'completion_status' => '', 'highest_year_level_units' => '',
     'date_graduated' => '', 'course_degree' => '', 'school_name' => '', 'school_address' => '',
     'eligibility_status' => '', 'eligibility_type' => '', 'other_eligibility_type' => '',
+    'service_job_seeker' => false, 'service_agency_services' => false,
 ];
 
 $educLevelOptions = ['High School/Senior High Level', 'Technical/Vocational', 'College Level', 'Postgraduate (Master/Doctorate)'];
@@ -22,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($old as $key => $_) {
         $old[$key] = clean($_POST[$key] ?? '');
     }
+    $old['service_job_seeker'] = isset($_POST['service_job_seeker']);
+    $old['service_agency_services'] = isset($_POST['service_agency_services']);
 
     // The generic foreach above already read the other 9 new fields
     // (they're part of $old's defaults) — other_eligibility_type is the
@@ -36,6 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---- Server-side validation ----
+    if (!$old['service_job_seeker'] && !$old['service_agency_services']) {
+        $errors['services_availed'] = 'Please select at least one service availed.';
+    }
     if ($old['last_name'] === '')  $errors['last_name'] = 'Last name is required.';
     if ($old['first_name'] === '') $errors['first_name'] = 'First name is required.';
     if (!in_array($old['sex'], ['MALE', 'FEMALE'], true)) $errors['sex'] = 'Please select sex.';
@@ -57,49 +63,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $validCivil = ['SINGLE', 'MARRIED', 'WIDOWED', 'SEPARATED', 'DIVORCED', 'OTHER'];
     if (!in_array($old['civil_status'], $validCivil, true)) $errors['civil_status'] = 'Please select civil status.';
 
-    if (!in_array($old['educational_level'], $educLevelOptions, true)) {
-        $errors['educational_level'] = 'Please select an educational level.';
-    }
+    // Educational Attainment and Eligibility are only required when
+    // registering as a Job Seeker — an Avail-Agency-Service-only
+    // registrant can still optionally fill them in (nothing below
+    // clears $old for these fields when Job Seeker is unchecked), they
+    // just aren't validated or required.
+    if ($old['service_job_seeker']) {
+        if (!in_array($old['educational_level'], $educLevelOptions, true)) {
+            $errors['educational_level'] = 'Please select an educational level.';
+        }
 
-    if (!in_array($old['completion_status'], ['Not Graduated', 'Graduated'], true)) {
-        $errors['completion_status'] = 'Please select completion status.';
-    } elseif ($old['completion_status'] === 'Not Graduated') {
-        if ($old['highest_year_level_units'] === '') {
-            $errors['highest_year_level_units'] = 'Highest year/level/units earned is required.';
-        }
-        $old['date_graduated'] = '';
-        $old['course_degree'] = '';
-        $old['school_name'] = '';
-        $old['school_address'] = '';
-    } else {
-        if ($old['date_graduated'] === '' || !strtotime($old['date_graduated'])) {
-            $errors['date_graduated'] = 'A valid graduation date is required.';
-        } elseif (strtotime($old['date_graduated']) > time()) {
-            $errors['date_graduated'] = 'Date graduated cannot be in the future.';
-        }
-        if ($old['course_degree'] === '') $errors['course_degree'] = 'Complete title of course/degree is required.';
-        if ($old['school_name'] === '') $errors['school_name'] = 'Name of school is required.';
-        if ($old['school_address'] === '') $errors['school_address'] = 'School address is required.';
-        $old['highest_year_level_units'] = '';
-    }
-
-    if (!in_array($old['eligibility_status'], ['Eligible', 'Not Eligible'], true)) {
-        $errors['eligibility_status'] = 'Please select eligibility status.';
-    } elseif ($old['eligibility_status'] === 'Not Eligible') {
-        $old['eligibility_type'] = '';
-        $old['other_eligibility_type'] = '';
-    } else {
-        if (!in_array($old['eligibility_type'], $eligibilityTypeOptions, true)) {
-            $errors['eligibility_type'] = 'Please select an eligibility type.';
-        }
-        if ($old['eligibility_type'] === 'Other Eligibility') {
-            if ($old['other_eligibility_type'] === '') {
-                $errors['other_eligibility_type'] = 'Please specify the other eligibility type.';
-            } elseif (mb_strlen($old['other_eligibility_type']) > 150) {
-                $errors['other_eligibility_type'] = 'Other eligibility type must be 150 characters or fewer.';
+        if (!in_array($old['completion_status'], ['Not Graduated', 'Graduated'], true)) {
+            $errors['completion_status'] = 'Please select completion status.';
+        } elseif ($old['completion_status'] === 'Not Graduated') {
+            if ($old['highest_year_level_units'] === '') {
+                $errors['highest_year_level_units'] = 'Highest year/level/units earned is required.';
             }
+            $old['date_graduated'] = '';
+            $old['course_degree'] = '';
+            $old['school_name'] = '';
+            $old['school_address'] = '';
         } else {
+            if ($old['date_graduated'] === '' || !strtotime($old['date_graduated'])) {
+                $errors['date_graduated'] = 'A valid graduation date is required.';
+            } elseif (strtotime($old['date_graduated']) > time()) {
+                $errors['date_graduated'] = 'Date graduated cannot be in the future.';
+            }
+            if ($old['course_degree'] === '') $errors['course_degree'] = 'Complete title of course/degree is required.';
+            if ($old['school_name'] === '') $errors['school_name'] = 'Name of school is required.';
+            if ($old['school_address'] === '') $errors['school_address'] = 'School address is required.';
+            $old['highest_year_level_units'] = '';
+        }
+
+        if (!in_array($old['eligibility_status'], ['Eligible', 'Not Eligible'], true)) {
+            $errors['eligibility_status'] = 'Please select eligibility status.';
+        } elseif ($old['eligibility_status'] === 'Not Eligible') {
+            $old['eligibility_type'] = '';
             $old['other_eligibility_type'] = '';
+        } else {
+            if (!in_array($old['eligibility_type'], $eligibilityTypeOptions, true)) {
+                $errors['eligibility_type'] = 'Please select an eligibility type.';
+            }
+            if ($old['eligibility_type'] === 'Other Eligibility') {
+                if ($old['other_eligibility_type'] === '') {
+                    $errors['other_eligibility_type'] = 'Please specify the other eligibility type.';
+                } elseif (mb_strlen($old['other_eligibility_type']) > 150) {
+                    $errors['other_eligibility_type'] = 'Other eligibility type must be 150 characters or fewer.';
+                }
+            } else {
+                $old['other_eligibility_type'] = '';
+            }
         }
     }
 
@@ -124,11 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare(
                 "INSERT INTO care_jf_applicants
                     (applicant_code, last_name, first_name, middle_name, extension_name, sex, date_of_birth, contact_number, address, civil_status,
+                     service_job_seeker, service_agency_services,
                      educational_level, completion_status, highest_year_level_units, date_graduated,
                      course_degree, school_name, school_address,
                      eligibility_status, eligibility_type, other_eligibility_type)
                  VALUES
                     (:code, :ln, :fn, :mn, :ext, :sex, :dob, :contact, :address, :civil,
+                     :svc_js, :svc_as,
                      :educ_level, :completion, :hylu, :date_grad, :course, :school_name, :school_addr,
                      :elig_status, :elig_type, :other_elig)"
             );
@@ -143,6 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':contact' => $old['contact_number'],
                 ':address' => $old['address'],
                 ':civil'   => $old['civil_status'],
+                ':svc_js'  => $old['service_job_seeker'] ? 1 : 0,
+                ':svc_as'  => $old['service_agency_services'] ? 1 : 0,
                 ':educ_level' => $old['educational_level'],
                 ':completion' => $old['completion_status'],
                 ':hylu'       => $old['highest_year_level_units'] ?: null,
@@ -195,6 +212,22 @@ require_once __DIR__ . '/../includes/sidebar.php';
   <form method="POST" id="registerForm" x-data="{ confirming: false, completion: <?= e(json_encode($old['completion_status'])) ?>, eligibility: <?= e(json_encode($old['eligibility_status'])) ?>, eligType: <?= e(json_encode($old['eligibility_type'])) ?> }"
         @submit="if (!validateForm($el)) { $event.preventDefault(); } else if (!confirming) { $event.preventDefault(); confirming = true; }">
     <?= csrf_field() ?>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mb-5">
+      <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-1">Services Availed <span class="text-red-500">*</span></h2>
+      <p class="text-xs text-slate-400 mb-3">Select at least one. You may select both.</p>
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="service_job_seeker" value="1" <?= $old['service_job_seeker'] ? 'checked' : '' ?> class="rounded border-slate-300">
+          Job Seeker
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="service_agency_services" value="1" <?= $old['service_agency_services'] ? 'checked' : '' ?> class="rounded border-slate-300">
+          Avail Agency Services
+        </label>
+      </div>
+      <p class="text-xs text-red-500 mt-2 <?= empty($errors['services_availed']) ? 'hidden' : '' ?>"><?= e($errors['services_availed'] ?? '') ?></p>
+    </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
       <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-4">Personal Information</h2>
