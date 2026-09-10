@@ -30,7 +30,7 @@ $flash = flash_get();
 
 <?php if ($flash): ?>
 <div id="flash-toast"
-     class="fixed top-4 right-4 z-[100] max-w-sm rounded-lg shadow-lg px-4 py-3 text-sm font-medium flex items-start gap-2 print:hidden
+     class="fixed top-4 right-4 z-[100] max-w-sm rounded-xl shadow-lg px-4 py-3.5 text-sm font-medium flex items-start gap-3 print:hidden
      <?= $flash['type'] === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white' ?>">
   <i class="fa-solid <?= $flash['type'] === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation' ?> mt-0.5"></i>
   <span><?= e($flash['message']) ?></span>
