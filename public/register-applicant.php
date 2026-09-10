@@ -377,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" name="service_agency_services" value="1" <?= $old['service_agency_services'] ? 'checked' : '' ?> class="rounded border-slate-300">
-          Avail Agency Services
+          Agency Services
         </label>
       </div>
       <p class="text-xs text-red-500 mt-2 <?= empty($errors['services_availed']) ? 'hidden' : '' ?>"><?= e($errors['services_availed'] ?? '') ?></p>
