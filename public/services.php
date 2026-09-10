@@ -2,10 +2,6 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
-if (!can_manage_agency() && !is_partner_agency()) {
-    http_response_code(403);
-    die('<h2 style="font-family:sans-serif">403 — You do not have permission to access this page.</h2>');
-}
 
 $pdo = Database::getConnection();
 $currentUserId = (int)current_user()['id'];
