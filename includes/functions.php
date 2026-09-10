@@ -389,7 +389,11 @@ function tag_applicant_for_service(
     );
     $dupStmt->execute([':id' => $applicantId, ':agid' => $agencyId]);
     if ((int)$dupStmt->fetchColumn() > 0) {
-        return 'duplicate';
+        // Not an error in Phase 2: re-scanning an already-tagged Client
+        // reopens the service-selection modal against their existing row
+        // (see set_service_availment_selection() below) instead of being
+        // rejected — this row already exists, nothing new to insert.
+        return 'reused';
     }
 
     $tagStmt = $pdo->prepare(
@@ -415,6 +419,67 @@ function tag_applicant_for_service(
         "Applicant {$applicantCode} {$verb} {$agencyRow['agency_name']}");
 
     return 'created';
+}
+
+/**
+ * Sets which specific service (from the agency's own catalog, or free
+ * text when "OTHERS" was chosen) a Client's service-availment row
+ * represents. Called only after tag_applicant_for_service() has already
+ * created-or-reused that row (Step 1) — this is purely Step 2, an UPDATE,
+ * never an INSERT. Shared by the async QR/manual-code scanner flow
+ * (api/service-availment-confirm.php) and the same-page "Tag for
+ * Service" form on applicant-view.php, so both use identical logic.
+ *
+ * Exactly one of $serviceId/$customServiceName should be non-null —
+ * callers validate this themselves before calling (the caller knows
+ * whether "OTHERS" was chosen); this function's own job is to re-verify
+ * $serviceId's agency ownership, never to infer caller intent.
+ *
+ * NOTE: $agencyId is trusted as-is — callers for a Partner Agency user
+ * MUST derive it via current_agency_id(), never from request input.
+ */
+function set_service_availment_selection(
+    PDO $pdo, int $applicantId, int $agencyId,
+    ?int $serviceId, ?string $customServiceName, int $actingUserId
+): string {
+    $resolvedName = $customServiceName;
+    if ($serviceId !== null) {
+        $svcStmt = $pdo->prepare(
+            "SELECT service_name FROM care_jf_agency_services WHERE id = :id AND agency_id = :agid AND status = 'Active'"
+        );
+        $svcStmt->execute([':id' => $serviceId, ':agid' => $agencyId]);
+        $resolvedName = $svcStmt->fetchColumn();
+        if ($resolvedName === false) {
+            return 'service_invalid';
+        }
+    }
+
+    $updStmt = $pdo->prepare(
+        "UPDATE care_jf_service_availments SET service_id = :sid, custom_service_name = :csn
+         WHERE applicant_id = :aid AND agency_id = :agid"
+    );
+    $updStmt->execute([
+        ':sid' => $serviceId, ':csn' => $customServiceName,
+        ':aid' => $applicantId, ':agid' => $agencyId,
+    ]);
+    if ($updStmt->rowCount() === 0) {
+        return 'not_found';
+    }
+
+    $availmentIdStmt = $pdo->prepare(
+        "SELECT id FROM care_jf_service_availments WHERE applicant_id = :aid AND agency_id = :agid"
+    );
+    $availmentIdStmt->execute([':aid' => $applicantId, ':agid' => $agencyId]);
+    $availmentId = (int)$availmentIdStmt->fetchColumn();
+
+    $codeStmt = $pdo->prepare("SELECT applicant_code FROM care_jf_applicants WHERE id = :id");
+    $codeStmt->execute([':id' => $applicantId]);
+    $applicantCode = (string)$codeStmt->fetchColumn();
+
+    audit_log($pdo, $actingUserId, 'SERVICE_AVAILED_SELECTION_SET', 'care_jf_service_availments', $availmentId,
+        "Applicant {$applicantCode}'s availed service set to \"{$resolvedName}\"");
+
+    return 'updated';
 }
 
 /** Basic email validation. */
