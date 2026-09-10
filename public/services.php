@@ -135,7 +135,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
-        <textarea name="description" rows="2" maxlength="500" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <textarea name="description" rows="2" maxlength="500" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea>
       </div>
       <div class="flex justify-end gap-2">
         <button type="button" @click="showAddService = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
@@ -189,7 +189,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <input type="hidden" name="action" value="edit_service">
               <input type="hidden" name="service_id" value="<?= (int)$svc['id'] ?>">
               <input type="text" name="service_name" required maxlength="200" value="<?= e($svc['service_name']) ?>" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-              <textarea name="description" rows="2" maxlength="500" class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"><?= e($svc['description'] ?? '') ?></textarea>
+              <textarea name="description" rows="2" maxlength="500" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"><?= e($svc['description'] ?? '') ?></textarea>
               <div class="flex justify-end gap-2">
                 <button type="button" @click="editingServiceId = null" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300">Cancel</button>
                 <button type="submit" class="px-3 py-1.5 text-sm rounded-lg bg-brand-600 text-white font-medium">Save</button>
