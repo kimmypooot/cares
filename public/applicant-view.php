@@ -129,6 +129,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$flashType, $flashMessage] = $tagResultMessages[$tagResult] ?? ['error', 'Could not tag this applicant.'];
         flash_set($flashType, $flashMessage);
         redirect('applicant-view.php?id=' . $id);
+    } elseif ($action === 'tag_for_service') {
+        if (!can_manage_employment() && !is_partner_agency()) {
+            http_response_code(403);
+            die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
+        }
+
+        if (empty($applicant['service_agency_services'])) {
+            flash_set('error', 'This applicant did not register to avail agency services.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        if (is_partner_agency()) {
+            $serviceAgencyId = current_agency_id($pdo);
+        } else {
+            $serviceAgencyId = !empty($_POST['agency_id']) ? (int)$_POST['agency_id'] : null;
+        }
+
+        if (!$serviceAgencyId) {
+            flash_set('error', 'Select a Partner Agency to tag for service.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
+        $serviceTagResult = tag_applicant_for_service(
+            $pdo, $id, $applicant['applicant_code'], $serviceAgencyId, (int)current_user()['id'], 'manual'
+        );
+
+        $serviceTagMessages = [
+            'agency_invalid' => ['error', 'Selected Partner Agency was not found.'],
+            'duplicate' => ['error', 'This agency has already logged a service availment for this applicant.'],
+            'created' => ['success', 'Service availment tagged.'],
+        ];
+        [$flashType, $flashMessage] = $serviceTagMessages[$serviceTagResult] ?? ['error', 'Could not tag this applicant.'];
+        flash_set($flashType, $flashMessage);
+        redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'confirm_hired') {
         if (!can_manage_employment() && !is_partner_agency()) {
             http_response_code(403);
@@ -374,6 +408,27 @@ $tagAgencyOptions = can_manage_employment()
     ? array_values(array_filter(active_agencies($pdo), fn($ag) => !in_array((int)$ag['id'], $reviewingAgencyIds, true)))
     : [];
 
+$serviceAvailmentsStmt = $pdo->prepare(
+    "SELECT sa.*, pa.agency_name FROM care_jf_service_availments sa
+     JOIN care_jf_partner_agencies pa ON pa.id = sa.agency_id
+     WHERE sa.applicant_id = :id ORDER BY sa.created_at DESC"
+);
+$serviceAvailmentsStmt->execute([':id' => $id]);
+$serviceAvailments = $serviceAvailmentsStmt->fetchAll();
+
+$myOpenServiceAvailment = null;
+if (is_partner_agency()) {
+    foreach ($serviceAvailments as $sa) {
+        if ((int)$sa['agency_id'] === $myAgencyIdForCheck) {
+            $myOpenServiceAvailment = $sa;
+            break;
+        }
+    }
+}
+
+$canTagForServiceAsPartnerAgency = is_partner_agency() && !$myOpenServiceAvailment && !empty($applicant['service_agency_services']);
+$canTagForServiceAsStaff = can_manage_employment() && !empty($applicant['service_agency_services']);
+
 $pageTitle = 'Applicant Profile';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
@@ -437,7 +492,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <?php
                 $svc = [];
                 if (!empty($applicant['service_job_seeker'])) $svc[] = 'Job Seeker';
-                if (!empty($applicant['service_agency_services'])) $svc[] = 'Agency Services';
+                if (!empty($applicant['service_agency_services'])) $svc[] = 'Avail Agency Services';
               ?>
               <?php if ($svc): ?>
                 <?php foreach ($svc as $s): ?>
@@ -489,9 +544,10 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </div>
 
       <?php
-        $canTagAsPartnerAgency = is_partner_agency() && !$myOpenReview && !$applicantIsHired;
-        $canTagAsStaff = can_manage_employment() && $tagAgencyOptions && !$applicantIsHired;
+        $canTagAsPartnerAgency = is_partner_agency() && !$myOpenReview && !$applicantIsHired && !empty($applicant['service_job_seeker']);
+        $canTagAsStaff = can_manage_employment() && $tagAgencyOptions && !$applicantIsHired && !empty($applicant['service_job_seeker']);
       ?>
+      <?php if (!empty($applicant['service_job_seeker'])): ?>
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ confirmHireRecordId: null, showTagForReview: false }">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Employment History</h2>
@@ -658,6 +714,77 @@ require_once __DIR__ . '/../includes/sidebar.php';
         </div>
         <?php endif; ?>
       </div>
+      <?php endif; ?>
+
+      <?php if (!empty($applicant['service_agency_services'])): ?>
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ showTagForService: false }">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Services Availed History</h2>
+          <div class="flex gap-3 print:hidden">
+            <?php if ($canTagForServiceAsPartnerAgency || $canTagForServiceAsStaff): ?>
+            <button type="button" @click="showTagForService = true" class="text-xs font-medium text-emerald-600 hover:text-emerald-800"><i class="fa-solid fa-flag mr-1"></i> Tag for Service</button>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div x-show="showTagForService" x-cloak class="fixed inset-0 bg-black/40 z-[90] flex items-center justify-center p-4">
+          <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 class="font-semibold text-slate-800 mb-2"><i class="fa-solid fa-flag text-emerald-600 mr-1"></i> Tag for Service</h3>
+            <form method="POST">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="tag_for_service">
+              <input type="hidden" name="id" value="<?= (int)$id ?>">
+              <?php if (can_manage_employment()): ?>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency <span class="text-red-500">*</span></label>
+                <select name="agency_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
+                  <option value="">Select a Partner Agency</option>
+                  <?php foreach (active_agencies($pdo) as $ag): ?>
+                    <option value="<?= (int)$ag['id'] ?>"><?= e($ag['agency_name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              <?php else: ?>
+                <p class="text-sm text-slate-600 mb-5">Log a service availment for <?= e(full_name($applicant)) ?> with <strong><?= e($myAgencyName) ?></strong>?</p>
+              <?php endif; ?>
+              <div class="flex justify-end gap-2">
+                <button type="button" @click="showTagForService = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium">Confirm Tag</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <?php if (!$serviceAvailments): ?>
+          <div class="text-center py-8 text-slate-400">
+            <i class="fa-solid fa-handshake text-2xl mb-2 block"></i> No service availments yet.
+          </div>
+        <?php else: ?>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
+              <tr>
+                <th class="text-left py-2 pr-3">Agency</th>
+                <th class="text-left py-2 pr-3">Date Tagged</th>
+                <th class="text-left py-2 pr-3">Source</th>
+                <th class="text-left py-2 pr-3">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <?php foreach ($serviceAvailments as $sa): ?>
+              <tr>
+                <td class="py-2.5 pr-3"><?= e($sa['agency_name']) ?></td>
+                <td class="py-2.5 pr-3"><?= format_date($sa['created_at']) ?></td>
+                <td class="py-2.5 pr-3"><?= e($sa['source'] === 'qr_scan' ? 'QR Scan' : 'Manual') ?></td>
+                <td class="py-2.5 pr-3">
+                  <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $sa['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($sa['status']) ?></span>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
 
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
         <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide mb-4">Remarks</h2>
