@@ -63,7 +63,8 @@ if ($statusFilter !== '' && $statusFilter !== 'All') {
 }
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$stmt = $pdo->prepare("SELECT pa.*, (SELECT COUNT(*) FROM care_jf_employment_records er WHERE er.agency_id = pa.id) AS record_count
+$stmt = $pdo->prepare("SELECT pa.*, (SELECT COUNT(*) FROM care_jf_employment_records er WHERE er.agency_id = pa.id) AS record_count,
+                        (SELECT COUNT(*) FROM care_jf_agency_services asv WHERE asv.agency_id = pa.id AND asv.status = 'Active') AS active_service_count
                         FROM care_jf_partner_agencies pa $whereSql ORDER BY agency_name");
 $stmt->execute($params);
 $agencies = $stmt->fetchAll();
@@ -140,13 +141,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <th class="px-4 py-2.5 text-left">Contact No</th>
             <th class="px-4 py-2.5 text-left">Email</th>
             <th class="px-4 py-2.5 text-left">Employment Records</th>
+            <th class="px-4 py-2.5 text-left">Services</th>
             <th class="px-4 py-2.5 text-left">Status</th>
             <th class="px-4 py-2.5 text-right print:hidden">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <?php if (!$agencies): ?>
-            <tr><td colspan="7" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No partner agencies found.</td></tr>
+            <tr><td colspan="8" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No partner agencies found.</td></tr>
           <?php endif; ?>
           <?php foreach ($agencies as $ag): ?>
           <tr class="hover:bg-slate-50">
@@ -155,6 +157,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <td class="px-4 py-3 text-slate-500" data-label="Contact No"><?= e($ag['contact_no'] ?: '—') ?></td>
             <td class="px-4 py-3 text-slate-500" data-label="Email"><?= e($ag['email'] ?: '—') ?></td>
             <td class="px-4 py-3" data-label="Records"><?= (int)$ag['record_count'] ?></td>
+            <td class="px-4 py-3" data-label="Services"><?= (int)$ag['active_service_count'] ?></td>
             <td class="px-4 py-3" data-label="Status">
               <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $ag['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($ag['status']) ?></span>
             </td>
