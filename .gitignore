@@ -2,3 +2,4 @@ node_modules/
 database/backups/
 .claude/worktrees/
 .superpowers/
+scripts/*.csv
