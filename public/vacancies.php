@@ -9,7 +9,7 @@ if (!can_manage_employment() && !is_partner_agency()) {
 }
 
 $pdo = Database::getConnection();
-$jobLevels = ['Plantilla Level 1', 'Plantilla Level 2', 'Job Order', 'COS'];
+$jobLevels = ['Plantilla Level 1', 'Plantilla Level 2', 'Job Order', 'COS', 'GIP'];
 $statusOptions = ['Active', 'Disabled', 'Filled', 'Closed'];
 $addStatusOptions = ['Active' => 'Active', 'Disabled' => 'Inactive'];
 $scopedAgencyId = is_partner_agency() ? current_agency_id($pdo) : null;
