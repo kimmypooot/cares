@@ -97,6 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die('<h2 style="font-family:sans-serif">403 — You do not have permission to perform this action.</h2>');
         }
 
+        if (empty($applicant['service_job_seeker'])) {
+            flash_set('error', 'This applicant did not register as a Job Seeker.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
         if (is_applicant_hired($pdo, $id)) {
             flash_set('error', 'This applicant has already been hired.');
             redirect('applicant-view.php?id=' . $id);
@@ -408,12 +413,22 @@ $tagAgencyOptions = can_manage_employment()
     ? array_values(array_filter(active_agencies($pdo), fn($ag) => !in_array((int)$ag['id'], $reviewingAgencyIds, true)))
     : [];
 
+$saWhere = "sa.applicant_id = :id";
+$saParams = [':id' => $id];
+if (is_partner_agency()) {
+    // A service availment is agency-private information, like an
+    // in-flight employment review tag — a Partner Agency must only see
+    // their own agency's availment rows for this applicant, never
+    // another agency's.
+    $saWhere .= " AND sa.agency_id = :myagid";
+    $saParams[':myagid'] = current_agency_id($pdo);
+}
 $serviceAvailmentsStmt = $pdo->prepare(
     "SELECT sa.*, pa.agency_name FROM care_jf_service_availments sa
      JOIN care_jf_partner_agencies pa ON pa.id = sa.agency_id
-     WHERE sa.applicant_id = :id ORDER BY sa.created_at DESC"
+     WHERE $saWhere ORDER BY sa.created_at DESC"
 );
-$serviceAvailmentsStmt->execute([':id' => $id]);
+$serviceAvailmentsStmt->execute($saParams);
 $serviceAvailments = $serviceAvailmentsStmt->fetchAll();
 
 $myOpenServiceAvailment = null;
@@ -547,7 +562,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         $canTagAsPartnerAgency = is_partner_agency() && !$myOpenReview && !$applicantIsHired && !empty($applicant['service_job_seeker']);
         $canTagAsStaff = can_manage_employment() && $tagAgencyOptions && !$applicantIsHired && !empty($applicant['service_job_seeker']);
       ?>
-      <?php if (!empty($applicant['service_job_seeker'])): ?>
+      <?php if (!empty($applicant['service_job_seeker']) || $employmentRecords): ?>
       <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ confirmHireRecordId: null, showTagForReview: false }">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Employment History</h2>

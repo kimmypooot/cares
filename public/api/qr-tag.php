@@ -99,6 +99,8 @@ if ($onlyEmployment) {
     } elseif ($results['employment'] === 'duplicate') {
         flash_set('success', 'Applicant is already associated with your agency.');
     }
+} elseif (!$results) {
+    flash_set('error', 'This applicant did not register for any service — nothing to tag.');
 } else {
     $flashParts = [];
     if (isset($results['employment'])) {
