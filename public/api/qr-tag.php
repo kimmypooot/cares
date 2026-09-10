@@ -47,7 +47,8 @@ if ($code === '') {
 }
 
 $stmt = $pdo->prepare(
-    "SELECT id, applicant_code, service_job_seeker, service_agency_services
+    "SELECT id, applicant_code, first_name, middle_name, last_name, extension_name,
+            service_job_seeker, service_agency_services
      FROM care_jf_applicants WHERE applicant_code = :code AND is_deleted = 0"
 );
 $stmt->execute([':code' => $code]);
@@ -113,7 +114,7 @@ if ($onlyEmployment) {
     if (isset($results['service'])) {
         if ($results['service'] === 'created') {
             $flashParts[] = 'service availed logged with your agency';
-        } elseif ($results['service'] === 'duplicate') {
+        } elseif ($results['service'] === 'reused') {
             $flashParts[] = 'service availment already on file with your agency';
         }
     }
@@ -122,8 +123,22 @@ if ($onlyEmployment) {
     }
 }
 
-echo json_encode(array_merge(
-    ['ok' => true, 'applicant_id' => $applicantId],
-    isset($results['employment']) ? ['employment_status' => $results['employment']] : [],
-    isset($results['service']) ? ['service_status' => $results['service']] : []
-));
+$extra = [];
+if (isset($results['employment'])) {
+    $extra['employment_status'] = $results['employment'];
+}
+if (isset($results['service'])) {
+    $extra['service_status'] = $results['service'];
+    $extra['full_name'] = full_name($applicant);
+
+    $svcOptStmt = $pdo->prepare(
+        "SELECT id, service_name FROM care_jf_agency_services WHERE agency_id = :agid AND status = 'Active' ORDER BY service_name"
+    );
+    $svcOptStmt->execute([':agid' => $agencyId]);
+    $extra['service_options'] = array_map(
+        fn($row) => ['id' => (int)$row['id'], 'service_name' => $row['service_name']],
+        $svcOptStmt->fetchAll()
+    );
+}
+
+echo json_encode(array_merge(['ok' => true, 'applicant_id' => $applicantId], $extra));
