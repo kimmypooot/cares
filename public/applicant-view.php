@@ -446,8 +446,10 @@ if (is_partner_agency()) {
     $saParams[':myagid'] = current_agency_id($pdo);
 }
 $serviceAvailmentsStmt = $pdo->prepare(
-    "SELECT sa.*, pa.agency_name FROM care_jf_service_availments sa
+    "SELECT sa.*, pa.agency_name, asv.service_name AS catalog_service_name
+     FROM care_jf_service_availments sa
      JOIN care_jf_partner_agencies pa ON pa.id = sa.agency_id
+     LEFT JOIN care_jf_agency_services asv ON asv.id = sa.service_id
      WHERE $saWhere ORDER BY sa.created_at DESC"
 );
 $serviceAvailmentsStmt->execute($saParams);
@@ -817,6 +819,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
               <tr>
                 <th class="text-left py-2 pr-3">Agency</th>
+                <th class="text-left py-2 pr-3">Service</th>
                 <th class="text-left py-2 pr-3">Date Tagged</th>
                 <th class="text-left py-2 pr-3">Source</th>
                 <th class="text-left py-2 pr-3">Status</th>
@@ -826,6 +829,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <?php foreach ($serviceAvailments as $sa): ?>
               <tr>
                 <td class="py-2.5 pr-3"><?= e($sa['agency_name']) ?></td>
+                <td class="py-2.5 pr-3"><?= e($sa['catalog_service_name'] ?? $sa['custom_service_name'] ?? '—') ?></td>
                 <td class="py-2.5 pr-3"><?= format_date($sa['created_at']) ?></td>
                 <td class="py-2.5 pr-3"><?= e($sa['source'] === 'qr_scan' ? 'QR Scan' : 'Manual') ?></td>
                 <td class="py-2.5 pr-3">
