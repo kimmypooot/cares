@@ -291,6 +291,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
   </div>
 
   <div x-show="tab === 'partner-agencies'" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="overflow-x-auto">
     <table class="min-w-full text-sm responsive-cards">
       <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
         <tr>
@@ -382,6 +383,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
 
   <div x-show="tab === 'users'" x-cloak>
@@ -432,6 +434,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
   </div>
 
   <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="overflow-x-auto">
     <table class="min-w-full text-sm responsive-cards">
       <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
         <tr>
@@ -521,6 +524,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
   </div>
 </div>
