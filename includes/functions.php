@@ -361,6 +361,62 @@ function tag_applicant_for_agency(
     return 'created';
 }
 
+/**
+ * Associates a client (an applicant with service_agency_services=1) with
+ * a Partner Agency by inserting a care_jf_service_availments row. Mirrors
+ * tag_applicant_for_agency()'s agency-validity and duplicate checks, but
+ * has no "already hired" gate — employment status has no bearing on
+ * whether someone can avail a Partner Agency's service — and no Hired/
+ * vacancy lifecycle to advance later.
+ *
+ * NOTE: $agencyId is trusted as-is — this function does not verify it
+ * belongs to the acting user. Callers for a Partner Agency user MUST
+ * derive it via current_agency_id(), never from request input.
+ */
+function tag_applicant_for_service(
+    PDO $pdo, int $applicantId, string $applicantCode,
+    int $agencyId, int $actingUserId, string $source, string $sourceDetail = ''
+): string {
+    $agStmt = $pdo->prepare("SELECT agency_name FROM care_jf_partner_agencies WHERE id = :id AND status = 'Active'");
+    $agStmt->execute([':id' => $agencyId]);
+    $agencyRow = $agStmt->fetch();
+    if (!$agencyRow) {
+        return 'agency_invalid';
+    }
+
+    $dupStmt = $pdo->prepare(
+        "SELECT COUNT(*) FROM care_jf_service_availments WHERE applicant_id = :id AND agency_id = :agid"
+    );
+    $dupStmt->execute([':id' => $applicantId, ':agid' => $agencyId]);
+    if ((int)$dupStmt->fetchColumn() > 0) {
+        return 'duplicate';
+    }
+
+    $tagStmt = $pdo->prepare(
+        "INSERT INTO care_jf_service_availments (applicant_id, agency_id, source, status)
+         VALUES (:aid, :agid, :source, 'Active')"
+    );
+    $tagStmt->execute([':aid' => $applicantId, ':agid' => $agencyId, ':source' => $source]);
+    $newId = (int)$pdo->lastInsertId();
+
+    $actionCode = $source === 'qr_scan' ? 'SERVICE_AVAILED_AUTO_TAGGED_QR' : 'SERVICE_AVAILED_TAGGED';
+    if ($source === 'qr_scan') {
+        if ($sourceDetail === 'camera') {
+            $verb = 'auto-tagged (service availed) via QR camera scan by';
+        } elseif ($sourceDetail === 'manual') {
+            $verb = 'auto-tagged (service availed) via confirmed manual code entry by';
+        } else {
+            $verb = 'auto-tagged (service availed) via QR scan by';
+        }
+    } else {
+        $verb = 'tagged (service availed) by';
+    }
+    audit_log($pdo, $actingUserId, $actionCode, 'care_jf_service_availments', $newId,
+        "Applicant {$applicantCode} {$verb} {$agencyRow['agency_name']}");
+
+    return 'created';
+}
+
 /** Basic email validation. */
 function is_valid_email(string $email): bool
 {
