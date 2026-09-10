@@ -46,7 +46,10 @@ if ($code === '') {
     exit;
 }
 
-$stmt = $pdo->prepare("SELECT id, applicant_code FROM care_jf_applicants WHERE applicant_code = :code AND is_deleted = 0");
+$stmt = $pdo->prepare(
+    "SELECT id, applicant_code, service_job_seeker, service_agency_services
+     FROM care_jf_applicants WHERE applicant_code = :code AND is_deleted = 0"
+);
 $stmt->execute([':code' => $code]);
 $applicant = $stmt->fetch();
 
@@ -63,18 +66,46 @@ if (!$agencyId) {
     exit;
 }
 
-$result = tag_applicant_for_agency(
-    $pdo, $applicantId, $applicant['applicant_code'], $agencyId, (int)current_user()['id'], 'qr_scan', $via
-);
+$actingUserId = (int)current_user()['id'];
+$results = [];
+$flashParts = [];
 
-if ($result === 'created') {
-    flash_set('success', 'Applicant successfully associated with your agency.');
-} elseif ($result === 'duplicate') {
-    flash_set('success', 'Applicant is already associated with your agency.');
+if ($applicant['service_job_seeker']) {
+    $results['employment'] = tag_applicant_for_agency(
+        $pdo, $applicantId, $applicant['applicant_code'], $agencyId, $actingUserId, 'qr_scan', $via
+    );
+    if ($results['employment'] === 'created') {
+        $flashParts[] = 'tagged for review';
+    } elseif ($results['employment'] === 'duplicate') {
+        $flashParts[] = 'already associated with your agency';
+    }
+}
+if ($applicant['service_agency_services']) {
+    $results['service'] = tag_applicant_for_service(
+        $pdo, $applicantId, $applicant['applicant_code'], $agencyId, $actingUserId, 'qr_scan', $via
+    );
+    if ($results['service'] === 'created') {
+        $flashParts[] = 'service availed logged with your agency';
+    } elseif ($results['service'] === 'duplicate') {
+        $flashParts[] = 'service availment already on file with your agency';
+    }
 }
 
-if (in_array($result, ['created', 'duplicate', 'already_hired'], true)) {
-    echo json_encode(['ok' => true, 'status' => $result, 'applicant_id' => $applicantId]);
-} else {
-    echo json_encode(['ok' => false, 'status' => $result]);
+// agency_invalid is identical for both calls (same $agencyId every time) —
+// checking either is representative of "the scanning agency's own
+// account is not valid right now."
+$anyAgencyInvalid = in_array('agency_invalid', $results, true);
+if ($anyAgencyInvalid) {
+    echo json_encode(['ok' => false, 'status' => 'agency_invalid', 'applicant_id' => $applicantId]);
+    exit;
 }
+
+if ($flashParts) {
+    flash_set('success', 'Applicant ' . implode(' and ', $flashParts) . '.');
+}
+
+echo json_encode(array_merge(
+    ['ok' => true, 'applicant_id' => $applicantId],
+    isset($results['employment']) ? ['employment_status' => $results['employment']] : [],
+    isset($results['service']) ? ['service_status' => $results['service']] : []
+));
