@@ -520,6 +520,20 @@ function active_agencies(PDO $pdo, ?int $includeId = null): array
     return $stmt->fetchAll();
 }
 
+/** Active care_jf_agency_services rows for one agency (or empty if
+ * $agencyId is null — the staff/no-agency-picked case). */
+function active_agency_services(PDO $pdo, ?int $agencyId): array
+{
+    if (!$agencyId) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        "SELECT id, service_name FROM care_jf_agency_services WHERE agency_id = :agid AND status = 'Active' ORDER BY service_name"
+    );
+    $stmt->execute([':agid' => $agencyId]);
+    return $stmt->fetchAll();
+}
+
 /** Is this agency name already used by a different partner agency? Pass $excludeId when editing an existing one. */
 function agency_name_taken(PDO $pdo, string $agencyName, ?int $excludeId = null): bool
 {

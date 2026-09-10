@@ -156,16 +156,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('applicant-view.php?id=' . $id);
         }
 
+        $rawServiceSelection = clean($_POST['service_selection'] ?? '');
+        $customServiceInput = mb_strtoupper(trim(clean($_POST['custom_service_name'] ?? '')), 'UTF-8');
+        if ($rawServiceSelection === 'others' && $customServiceInput === '') {
+            flash_set('error', 'Please specify the other service.');
+            redirect('applicant-view.php?id=' . $id);
+        }
+
         $serviceTagResult = tag_applicant_for_service(
             $pdo, $id, $applicant['applicant_code'], $serviceAgencyId, (int)current_user()['id'], 'manual'
         );
 
         $serviceTagMessages = [
             'agency_invalid' => ['error', 'Selected Partner Agency was not found.'],
-            'duplicate' => ['error', 'This agency has already logged a service availment for this applicant.'],
             'created' => ['success', 'Service availment tagged.'],
+            'reused' => ['success', 'Service availment already on file for this applicant.'],
         ];
         [$flashType, $flashMessage] = $serviceTagMessages[$serviceTagResult] ?? ['error', 'Could not tag this applicant.'];
+
+        if (in_array($serviceTagResult, ['created', 'reused'], true) && $rawServiceSelection !== '') {
+            $selServiceId = $rawServiceSelection === 'others' ? null : (int)$rawServiceSelection;
+            $selCustomName = $rawServiceSelection === 'others' ? $customServiceInput : null;
+            $selectionResult = set_service_availment_selection(
+                $pdo, $id, $serviceAgencyId, $selServiceId, $selCustomName, (int)current_user()['id']
+            );
+            if ($selectionResult === 'updated') {
+                $flashMessage = 'Service availment tagged.';
+            } elseif ($selectionResult === 'service_invalid') {
+                $flashType = 'error';
+                $flashMessage = 'Selected service was not found for this agency.';
+            }
+        }
+
         flash_set($flashType, $flashMessage);
         redirect('applicant-view.php?id=' . $id);
     } elseif ($action === 'confirm_hired') {
@@ -732,7 +754,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <?php endif; ?>
 
       <?php if (!empty($applicant['service_agency_services'])): ?>
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ showTagForService: false }">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6" x-data="{ showTagForService: false, serviceSelection: '' }">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Services Availed History</h2>
           <div class="flex gap-3 print:hidden">
@@ -759,6 +781,23 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 </select>
               <?php else: ?>
                 <p class="text-sm text-slate-600 mb-5">Log a service availment for <?= e(full_name($applicant)) ?> with <strong><?= e($myAgencyName) ?></strong>?</p>
+              <?php endif; ?>
+              <?php if (is_partner_agency()): ?>
+              <div class="mt-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">Service Availed <span class="text-red-500">*</span></label>
+                <select name="service_selection" x-model="serviceSelection" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-3">
+                  <option value="">Select Service</option>
+                  <?php foreach (active_agency_services($pdo, is_partner_agency() ? current_agency_id($pdo) : null) as $svc): ?>
+                    <option value="<?= (int)$svc['id'] ?>"><?= e($svc['service_name']) ?></option>
+                  <?php endforeach; ?>
+                  <option value="others">OTHERS</option>
+                </select>
+                <div x-show="serviceSelection === 'others'" x-cloak>
+                  <label class="block text-sm font-medium text-slate-700 mb-1">Please Specify Other Service <span class="text-red-500">*</span></label>
+                  <input type="text" name="custom_service_name" maxlength="200" :required="serviceSelection === 'others'"
+                         class="uppercase-field uppercase w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+              </div>
               <?php endif; ?>
               <div class="flex justify-end gap-2">
                 <button type="button" @click="showTagForService = false" class="px-4 py-2 text-sm rounded-lg border border-slate-300">Cancel</button>
