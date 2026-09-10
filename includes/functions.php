@@ -74,6 +74,20 @@ function full_name(array $applicant): string
     return $name;
 }
 
+/** The logged-in Partner Agency's own name, for display contexts where
+ * only the session-derived agency (never a request-supplied one) may be
+ * shown — e.g. the Service Availment modal's header. Empty string if not
+ * a Partner Agency session or the agency record is missing. */
+function current_agency_name(PDO $pdo): string
+{
+    if (!is_partner_agency()) {
+        return '';
+    }
+    $stmt = $pdo->prepare("SELECT agency_name FROM care_jf_partner_agencies WHERE id = :id");
+    $stmt->execute([':id' => current_agency_id($pdo)]);
+    return (string)($stmt->fetchColumn() ?: '');
+}
+
 /**
  * Generate the next sequential applicant code for the current calendar
  * month, in the format APP-YYYYMM-NNNNNN (e.g. APP-202609-000001). The

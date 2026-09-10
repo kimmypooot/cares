@@ -163,12 +163,30 @@ function qrScanner(options = {}) {
     open: false,
     manualCode: '',
     cameraAvailable: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+    // Browsers only expose navigator.mediaDevices in a secure context
+    // (https://, or http://localhost/127.0.0.1) — a plain http:// page
+    // loaded from another machine on the LAN never gets the API at all,
+    // regardless of whether a camera is actually attached (this is why
+    // cameraAvailable above is false in that case). Surfaced separately
+    // so the UI can explain *why* the camera option is missing instead
+    // of silently omitting it.
+    cameraBlockedByInsecureOrigin: !window.isSecureContext,
     cameraActive: false,
     cameraError: '',
     lookupError: '',
     tagging: false,
+    lookingUp: false,
     showConfirmTag: false,
     pendingCode: '',
+    pendingName: '',
+    showServiceModal: false,
+    serviceClientName: '',
+    serviceApplicantId: null,
+    serviceOptions: [],
+    selectedServiceId: '',
+    customServiceName: '',
+    serviceModalError: '',
+    confirmingService: false,
     _stream: null,
     _rafId: null,
     _generation: 0,
@@ -184,27 +202,54 @@ function qrScanner(options = {}) {
       this.showConfirmTag = false;
       this.open = false;
     },
-    submitManual() {
+    async submitManual() {
       const code = this.manualCode.trim();
       if (!code) return;
-      if (this.isPartnerAgency) {
-        this.pendingCode = code;
-        this.lookupError = '';
-        this.showConfirmTag = true;
-      } else {
+      if (!this.isPartnerAgency) {
         this.navigateToCode(code);
+        return;
       }
+
+      // Look up the applicant's name first so the confirm dialog reads
+      // "Associate <Full Name> (<code>)" instead of just the bare code —
+      // this is a read-only lookup, no tag is created until Associate is
+      // clicked, which still goes through the real tagging endpoint.
+      if (this.lookingUp) return;
+      this.lookingUp = true;
+      this.lookupError = '';
+      let data = null;
+      try {
+        const response = await fetch('api/applicant-lookup.php?code=' + encodeURIComponent(code));
+        data = await response.json();
+      } catch (err) {
+        this.lookingUp = false;
+        this.lookupError = 'Could not reach the server. Please try again.';
+        return;
+      }
+      this.lookingUp = false;
+
+      if (!data || !data.ok) {
+        this.lookupError = 'Applicant not found.';
+        return;
+      }
+
+      this.pendingCode = data.applicant_code;
+      this.pendingName = data.full_name;
+      this.lookupError = '';
+      this.showConfirmTag = true;
     },
     cancelConfirmTag() {
       const code = this.pendingCode;
       this.showConfirmTag = false;
       this.pendingCode = '';
+      this.pendingName = '';
       this.navigateToCode(code);
     },
     confirmTag() {
       const code = this.pendingCode;
       this.showConfirmTag = false;
       this.pendingCode = '';
+      this.pendingName = '';
       this.tagAndNavigate(code, 'manual');
     },
     navigateToCode(code) {
@@ -242,6 +287,12 @@ function qrScanner(options = {}) {
 
       this.tagging = false;
       if (data && data.ok) {
+        if (data.service_options) {
+          this.open = false;
+          this.stopCamera();
+          this.openServiceModal(data);
+          return;
+        }
         window.location.href = 'applicant-view.php?id=' + encodeURIComponent(data.applicant_id);
         return;
       }
@@ -253,6 +304,66 @@ function qrScanner(options = {}) {
         this.lookupError = 'Your Partner Agency account is not currently active. Contact an administrator.';
       } else {
         this.lookupError = 'Applicant not found.';
+      }
+    },
+    openServiceModal(data) {
+      this.serviceClientName = data.full_name || '';
+      this.serviceApplicantId = data.applicant_id;
+      this.serviceOptions = data.service_options || [];
+      this.selectedServiceId = '';
+      this.customServiceName = '';
+      this.serviceModalError = '';
+      this.showServiceModal = true;
+    },
+    cancelServiceModal() {
+      const id = this.serviceApplicantId;
+      this.showServiceModal = false;
+      this.serviceApplicantId = null;
+      window.location.href = 'applicant-view.php?id=' + encodeURIComponent(id);
+    },
+    async confirmServiceModal() {
+      if (this.confirmingService) return;
+      if (!this.selectedServiceId) {
+        this.serviceModalError = 'Please select a service.';
+        return;
+      }
+      if (this.selectedServiceId === 'others' && !this.customServiceName.trim()) {
+        this.serviceModalError = 'Please specify the other service.';
+        return;
+      }
+      this.confirmingService = true;
+      this.serviceModalError = '';
+      const body = { applicant_id: this.serviceApplicantId };
+      if (this.selectedServiceId === 'others') {
+        body.service_id = 'others';
+        body.custom_service_name = this.customServiceName.trim();
+      } else {
+        body.service_id = this.selectedServiceId;
+      }
+      let response, data;
+      try {
+        const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        response = await fetch('api/service-availment-confirm.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': tokenMeta ? tokenMeta.getAttribute('content') : '',
+          },
+          body: JSON.stringify(body),
+        });
+        data = await response.json();
+      } catch (err) {
+        this.confirmingService = false;
+        this.serviceModalError = 'Could not reach the server. Please try again.';
+        return;
+      }
+      this.confirmingService = false;
+      if (data && data.ok) {
+        const id = this.serviceApplicantId;
+        this.showServiceModal = false;
+        window.location.href = 'applicant-view.php?id=' + encodeURIComponent(id);
+      } else {
+        this.serviceModalError = 'Could not save the selected service. Please try again.';
       }
     },
     async startCamera() {
