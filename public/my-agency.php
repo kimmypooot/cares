@@ -59,62 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'save_agency')
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_service') {
-    require_role(['Partner Agency']);
-    csrf_require();
-    $serviceName = mb_strtoupper(clean($_POST['service_name'] ?? ''), 'UTF-8');
-    $serviceDesc = clean($_POST['description'] ?? '');
-    if ($serviceName === '') {
-        flash_set('error', 'Service name is required.');
-    } elseif (mb_strlen($serviceName) > 200) {
-        flash_set('error', 'Service name must be 200 characters or fewer.');
-    } else {
-        // $agencyId is server-derived (current_agency_id()) — never trusted from the request.
-        $svcStmt = $pdo->prepare(
-            "INSERT INTO care_jf_agency_services (agency_id, service_name, description) VALUES (:aid, :n, :d)"
-        );
-        $svcStmt->execute([':aid' => $agencyId, ':n' => $serviceName, ':d' => $serviceDesc ?: null]);
-        $newServiceId = (int)$pdo->lastInsertId();
-        audit_log($pdo, (int)current_user()['id'], 'CREATE', 'care_jf_agency_services', $newServiceId, "Added service \"$serviceName\"");
-        flash_set('success', 'Service added.');
-    }
-    redirect('my-agency.php');
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['toggle_service', 'edit_service'], true)) {
-    require_role(['Partner Agency']);
-    csrf_require();
-    $serviceId = (int)($_POST['service_id'] ?? 0);
-    // Ownership check: this service must belong to the acting user's own
-    // agency — a Partner Agency user cannot manage another agency's
-    // services no matter what service_id is posted.
-    $ownStmt = $pdo->prepare("SELECT id, status FROM care_jf_agency_services WHERE id = :id AND agency_id = :aid");
-    $ownStmt->execute([':id' => $serviceId, ':aid' => $agencyId]);
-    $svcRow = $ownStmt->fetch();
-    if (!$svcRow) {
-        flash_set('error', 'Service not found.');
-    } elseif (($_POST['action'] ?? '') === 'toggle_service') {
-        $newStatus = $svcRow['status'] === 'Active' ? 'Disabled' : 'Active';
-        $pdo->prepare("UPDATE care_jf_agency_services SET status = :s WHERE id = :id")->execute([':s' => $newStatus, ':id' => $serviceId]);
-        audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_agency_services', $serviceId, "Service $newStatus");
-        flash_set('success', "Service $newStatus.");
-    } else {
-        $serviceName = mb_strtoupper(clean($_POST['service_name'] ?? ''), 'UTF-8');
-        $serviceDesc = clean($_POST['description'] ?? '');
-        if ($serviceName === '') {
-            flash_set('error', 'Service name is required.');
-        } else {
-            $pdo->prepare("UPDATE care_jf_agency_services SET service_name = :n, description = :d WHERE id = :id")
-                ->execute([':n' => $serviceName, ':d' => $serviceDesc ?: null, ':id' => $serviceId]);
-            audit_log($pdo, (int)current_user()['id'], 'UPDATE', 'care_jf_agency_services', $serviceId, "Updated service \"$serviceName\"");
-            flash_set('success', 'Service updated.');
-        }
-    }
-    redirect('my-agency.php');
-}
-
-$svcListStmt = $pdo->prepare("SELECT * FROM care_jf_agency_services WHERE agency_id = :id ORDER BY service_name");
-$svcListStmt->execute([':id' => $agencyId]);
-$agencyServices = $svcListStmt->fetchAll();
-
 $pageTitle = 'My Partner Agency';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/sidebar.php';
@@ -173,75 +117,6 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </button>
     </div>
   </form>
-
-<div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mt-5" x-data="{ showAddService: false, editingServiceId: null }">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Services Offered</h2>
-    <button type="button" @click="showAddService = true" class="text-xs font-medium text-brand-600 hover:text-brand-800"><i class="fa-solid fa-plus mr-1"></i> Add Service</button>
-  </div>
-
-  <div x-show="showAddService" x-cloak class="mb-4 p-4 bg-slate-50 rounded-lg">
-    <form method="POST" class="space-y-3">
-      <?= csrf_field() ?>
-      <input type="hidden" name="action" value="add_service">
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">Service Name <span class="text-red-500">*</span></label>
-        <input type="text" name="service_name" required maxlength="200" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">Description</label>
-        <textarea name="description" rows="2" maxlength="500" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"></textarea>
-      </div>
-      <div class="flex justify-end gap-2">
-        <button type="button" @click="showAddService = false" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300">Cancel</button>
-        <button type="submit" class="px-3 py-1.5 text-sm rounded-lg bg-brand-600 text-white font-medium">Add</button>
-      </div>
-    </form>
-  </div>
-
-  <?php if (!$agencyServices): ?>
-    <p class="text-sm text-slate-400">No services on file for this agency.</p>
-  <?php else: ?>
-  <div class="divide-y divide-slate-100">
-    <?php foreach ($agencyServices as $svc): ?>
-    <div class="py-3">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="text-sm font-medium text-slate-800"><?= e($svc['service_name']) ?>
-            <span class="ml-1 px-2 py-0.5 rounded-full text-xs font-medium <?= $svc['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($svc['status']) ?></span>
-          </p>
-          <?php if ($svc['description']): ?><p class="text-xs text-slate-500 mt-0.5"><?= e($svc['description']) ?></p><?php endif; ?>
-        </div>
-        <div class="flex gap-1 shrink-0">
-          <button type="button" @click="editingServiceId = editingServiceId === <?= (int)$svc['id'] ?> ? null : <?= (int)$svc['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <form method="POST" class="inline">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="toggle_service">
-            <input type="hidden" name="service_id" value="<?= (int)$svc['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:text-blue-600 px-1" title="<?= $svc['status']==='Active' ? 'Disable' : 'Enable' ?>">
-              <i class="fa-solid <?= $svc['status']==='Active' ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
-            </button>
-          </form>
-        </div>
-      </div>
-      <div x-show="editingServiceId === <?= (int)$svc['id'] ?>" x-cloak class="mt-2 p-3 bg-slate-50 rounded-lg">
-        <form method="POST" class="space-y-2">
-          <?= csrf_field() ?>
-          <input type="hidden" name="action" value="edit_service">
-          <input type="hidden" name="service_id" value="<?= (int)$svc['id'] ?>">
-          <input type="text" name="service_name" required maxlength="200" value="<?= e($svc['service_name']) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-          <textarea name="description" rows="2" maxlength="500" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"><?= e($svc['description'] ?? '') ?></textarea>
-          <div class="flex justify-end gap-2">
-            <button type="button" @click="editingServiceId = null" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300">Cancel</button>
-            <button type="submit" class="px-3 py-1.5 text-sm rounded-lg bg-brand-600 text-white font-medium">Save</button>
-          </div>
-        </form>
-      </div>
-    </div>
-    <?php endforeach; ?>
-  </div>
-  <?php endif; ?>
-</div>
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
