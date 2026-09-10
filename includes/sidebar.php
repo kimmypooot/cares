@@ -19,6 +19,7 @@ if (is_partner_agency()) {
     $navItems = [
         ['href' => 'dashboard.php',       'icon' => 'fa-gauge-high',   'label' => 'Dashboard',       'match' => ['dashboard.php']],
         ['href' => 'applicants.php',      'icon' => 'fa-users',        'label' => 'Applicants',      'match' => ['applicants.php', 'applicant-create.php', 'applicant-edit.php', 'applicant-view.php']],
+        ['href' => 'clients.php',         'icon' => 'fa-handshake',    'label' => 'Clients',         'match' => ['clients.php']],
         ['href' => 'employment-list.php', 'icon' => 'fa-briefcase',    'label' => 'Employment',      'match' => $employmentPages],
         ['href' => 'partner-agency.php',  'icon' => 'fa-building',     'label' => 'Partner Agency',  'match' => $agencyPages],
         ['href' => 'reports.php',         'icon' => 'fa-chart-column', 'label' => 'Reports',         'match' => ['reports.php']],
@@ -56,8 +57,8 @@ $navItems[] = ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settin
 <!-- Sidebar -->
 <aside
   :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
-  class="fixed lg:static inset-y-0 left-0 w-64 bg-brand-900 text-brand-100 flex flex-col z-50 transform transition-transform duration-200 ease-in-out print:hidden">
-  <div class="h-16 flex items-center gap-2 px-5 border-b border-white/10">
+  class="fixed lg:sticky inset-y-0 lg:top-0 left-0 lg:h-screen w-64 bg-brand-900 text-brand-100 flex flex-col z-50 transform transition-transform duration-200 ease-in-out print:hidden">
+  <div class="h-16 flex items-center gap-3 px-6 border-b border-white/10">
     <img src="assets/images/csc-logo.png" alt="CSC Logo" width="32" height="32" class="h-8 w-8 object-contain shrink-0">
     <div class="leading-tight">
       <p class="text-sm font-extrabold text-white tracking-wide">CARE</p>
@@ -66,7 +67,7 @@ $navItems[] = ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settin
     <button @click="sidebarOpen = false" class="ml-auto lg:hidden p-1"><i class="fa-solid fa-xmark"></i></button>
   </div>
 
-  <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+  <nav class="flex-1 overflow-y-auto py-5 px-3 space-y-1">
     <?php foreach ($navItems as $item): ?>
       <a href="<?= e($item['href']) ?>"
          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition
@@ -77,8 +78,8 @@ $navItems[] = ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settin
     <?php endforeach; ?>
   </nav>
 
-  <div class="border-t border-white/10 p-3">
-    <div class="flex items-center gap-3 px-2 py-2 rounded-lg">
+  <div class="border-t border-white/10 p-4">
+    <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg">
       <div class="w-9 h-9 rounded-full bg-brand-600 flex items-center justify-center font-semibold text-white">
         <?= e(strtoupper(substr($user['full_name'] ?: $user['username'], 0, 1))) ?>
       </div>
@@ -95,4 +96,4 @@ $navItems[] = ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settin
 </aside>
 
 <main class="flex-1 min-w-0 pt-14 lg:pt-0 print:pt-0">
-  <div class="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8">
+  <div class="max-w-[1400px] mx-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
