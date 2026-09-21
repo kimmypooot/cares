@@ -15,6 +15,7 @@ $flash = flash_get();
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<?php require __DIR__ . '/theme-init.php'; ?>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
 <title><?= e($pageTitle) ?> · CARE</title>
@@ -26,7 +27,7 @@ $flash = flash_get();
 <script defer src="assets/vendor/alpine/alpine.min.js"></script>
 <script src="assets/vendor/chart/chart.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased" x-data="{ sidebarOpen: false }">
+<body class="bg-slate-50 text-slate-800 antialiased" x-data="{ sidebarOpen: false, dark: document.documentElement.classList.contains('dark') }">
 
 <?php if ($flash): ?>
 <div id="flash-toast"

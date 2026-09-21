@@ -56,13 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_role(['Administrator']);
         $recordId = (int)($_POST['record_id'] ?? 0);
 
-        // If this is a confirmed hire tied to a Job Vacancy, restore that
-        // vacancy's slot before deleting the record — otherwise the
-        // vacancy stays permanently short one opening it no longer
-        // actually has. Only Delete restores the slot (not Disable/
-        // Enable) — deleting is the rare, irreversible action; toggling
-        // a record's status was never guarded against double-booking
-        // either, before or after this phase.
+        // If this is a confirmed hire tied to a Job Vacancy that was
+        // auto-marked Filled, reopen it before deleting the record —
+        // otherwise it stays Filled despite genuinely having an opening
+        // again (vacant_count itself is never touched; Filled is derived
+        // from a live COUNT of Hired records). Only Delete reopens it
+        // (not Disable/Enable) — deleting is the rare, irreversible
+        // action; toggling a record's status was never guarded against
+        // double-booking either, before or after this phase.
         $vacStmt = $pdo->prepare(
             "SELECT vacancy_id FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid AND employment_status = 'Hired'"
         );
@@ -72,11 +73,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             if ($vacancyToRestore) {
-                $pdo->prepare(
-                    "UPDATE care_jf_job_vacancies SET vacant_count = vacant_count + 1, status = IF(status = 'Filled', 'Active', status) WHERE id = :id"
-                )->execute([':id' => $vacancyToRestore]);
-                audit_log($pdo, (int)current_user()['id'], 'VACANCY_RESTORE', 'care_jf_job_vacancies', (int)$vacancyToRestore,
-                    'Vacancy slot restored (hire record deleted)');
+                $reopenStmt = $pdo->prepare(
+                    "UPDATE care_jf_job_vacancies SET status = 'Active' WHERE id = :id AND status = 'Filled'"
+                );
+                $reopenStmt->execute([':id' => $vacancyToRestore]);
+                if ($reopenStmt->rowCount() > 0) {
+                    audit_log($pdo, (int)current_user()['id'], 'VACANCY_RESTORE', 'care_jf_job_vacancies', (int)$vacancyToRestore,
+                        'Vacancy reopened (hire record deleted)');
+                }
             }
             $pdo->prepare("DELETE FROM care_jf_employment_records WHERE id = :id AND applicant_id = :aid")
                 ->execute([':id' => $recordId, ':aid' => $id]);
@@ -231,36 +235,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('applicant-view.php?id=' . $id);
             }
 
-            // Atomic, race-safe decrement: the UPDATE's own WHERE clause
-            // enforces "still belongs to this agency, still Active, still
-            // has an opening" in one statement, so a concurrent confirm_hired
-            // against the same vacancy can't read-then-write a stale count
-            // (the lost-update race a plain SELECT-then-UPDATE would have) —
-            // matching generate_employer_id()'s SQL-side-arithmetic pattern
-            // in includes/functions.php rather than computing the new value
-            // in PHP.
-            // NOTE: status is assigned BEFORE vacant_count in this SET
-            // clause deliberately — MySQL evaluates a single UPDATE's SET
-            // assignments left to right, and a later assignment sees the
-            // already-updated value of an earlier-assigned column in the
-            // same statement (documented MySQL behavior, differs from
-            // standard SQL). Assigning vacant_count first and then
-            // referencing "vacant_count - 1" in status's IF() would read
-            // the ALREADY-decremented value, double-counting the decrement
-            // (e.g. 2 -> 1 would wrongly flip straight to 'Filled'). Doing
-            // status first means its "vacant_count - 1" still reads the
-            // original pre-statement value.
-            $decStmt = $pdo->prepare(
-                "UPDATE care_jf_job_vacancies
-                    SET status = IF(vacant_count - 1 <= 0, 'Filled', status),
-                        vacant_count = vacant_count - 1
-                  WHERE id = :vid AND agency_id = :agid AND status = 'Active' AND vacant_count > 0"
+            // vacant_count is the fixed total number of positions posted for
+            // this vacancy and is never decremented on hire — "Filled" is
+            // always derived by counting Hired employment records against
+            // it (see vacancies.php's listing query), never stored. To stay
+            // race-safe without a same-row counter to decrement atomically,
+            // lock the vacancy row with SELECT ... FOR UPDATE first so a
+            // concurrent confirm_hired against the same vacancy serializes
+            // on this row, then compare a fresh COUNT of its Hired records
+            // (read only after the lock is held) against vacant_count.
+            $lockStmt = $pdo->prepare(
+                "SELECT vacant_count FROM care_jf_job_vacancies
+                  WHERE id = :vid AND agency_id = :agid AND status = 'Active' FOR UPDATE"
             );
-            $decStmt->execute([':vid' => $vacancyId, ':agid' => $rowAgencyId]);
-            if ($decStmt->rowCount() === 0) {
+            $lockStmt->execute([':vid' => $vacancyId, ':agid' => $rowAgencyId]);
+            $vacantCount = $lockStmt->fetchColumn();
+            if ($vacantCount === false) {
                 $pdo->rollBack();
                 flash_set('error', 'Selected Job Vacancy is not available.');
                 redirect('applicant-view.php?id=' . $id);
+            }
+
+            $filledCountStmt = $pdo->prepare(
+                "SELECT COUNT(*) FROM care_jf_employment_records WHERE vacancy_id = :vid AND employment_status = 'Hired'"
+            );
+            $filledCountStmt->execute([':vid' => $vacancyId]);
+            $filledCount = (int)$filledCountStmt->fetchColumn();
+
+            if ($filledCount >= (int)$vacantCount) {
+                $pdo->rollBack();
+                flash_set('error', 'Selected Job Vacancy has no remaining openings.');
+                redirect('applicant-view.php?id=' . $id);
+            }
+
+            // This hire fills the last open slot — flip the vacancy to
+            // Filled so it drops out of "available" dropdowns/filters.
+            if ($filledCount + 1 >= (int)$vacantCount) {
+                $pdo->prepare("UPDATE care_jf_job_vacancies SET status = 'Filled' WHERE id = :vid")
+                    ->execute([':vid' => $vacancyId]);
             }
 
             // Standing is_current bookkeeping rule: clear before setting.
@@ -276,8 +288,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             audit_log($pdo, (int)current_user()['id'], 'APPLICANT_HIRED', 'care_jf_employment_records', $recordId,
                 "Applicant {$applicant['applicant_code']} hired");
-            audit_log($pdo, (int)current_user()['id'], 'VACANCY_DECREMENT', 'care_jf_job_vacancies', $vacancyId,
-                "Vacancy decremented (hire: {$applicant['applicant_code']})");
+            if ($filledCount + 1 >= (int)$vacantCount) {
+                audit_log($pdo, (int)current_user()['id'], 'VACANCY_FILLED', 'care_jf_job_vacancies', $vacancyId,
+                    "Vacancy marked Filled (hire: {$applicant['applicant_code']})");
+            }
 
             $pdo->commit();
             flash_set('success', 'Applicant confirmed as Hired.');
@@ -422,8 +436,14 @@ $vacancyOptionsByAgency = [];
 if ($reviewingAgencyIds) {
     $inClause = implode(',', array_fill(0, count($reviewingAgencyIds), '?'));
     $vacStmt = $pdo->prepare(
-        "SELECT id, agency_id, position, job_level, vacant_count FROM care_jf_job_vacancies
-         WHERE agency_id IN ($inClause) AND status = 'Active' AND vacant_count > 0 ORDER BY position"
+        "SELECT jv.id, jv.agency_id, jv.position, jv.job_level, jv.vacant_count,
+                (SELECT COUNT(*) FROM care_jf_employment_records er
+                  WHERE er.vacancy_id = jv.id AND er.employment_status = 'Hired') AS filled_count
+         FROM care_jf_job_vacancies jv
+         WHERE jv.agency_id IN ($inClause) AND jv.status = 'Active'
+           AND jv.vacant_count > (SELECT COUNT(*) FROM care_jf_employment_records er2
+                                    WHERE er2.vacancy_id = jv.id AND er2.employment_status = 'Hired')
+         ORDER BY jv.position"
     );
     $vacStmt->execute($reviewingAgencyIds);
     foreach ($vacStmt->fetchAll() as $vRow) {
@@ -637,15 +657,15 @@ require_once __DIR__ . '/../includes/sidebar.php';
             'Withdrawn'  => 'bg-gray-100 text-gray-500',
             'Superseded' => 'bg-gray-100 text-gray-500',
         ]; ?>
-        <div class="overflow-x-auto">
-          <table class="min-w-full text-sm">
+        <div class="w-full min-w-0 overflow-x-auto">
+          <table class="min-w-max w-full text-sm">
             <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
               <tr>
-                <th class="text-left py-2 pr-3">Agency / Company</th>
-                <th class="text-left py-2 pr-3">Date Hired</th>
-                <th class="text-left py-2 pr-3">Classification</th>
-                <th class="text-left py-2 pr-3">Record Status</th>
-                <th class="text-right py-2 print:hidden">Actions</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Agency / Company</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Date Hired</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Classification</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Record Status</th>
+                <th class="text-right py-2 whitespace-nowrap min-w-[90px] print:hidden">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -679,9 +699,9 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <td class="py-2.5 pr-3"><?= $rec['date_hired'] ? format_date($rec['date_hired']) : '—' ?></td>
                 <td class="py-2.5 pr-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium uppercase <?= $classColors[$rec['employment_status']] ?? 'bg-slate-100 text-slate-700' ?>"><?= e($rec['employment_status']) ?></span></td>
                 <td class="py-2.5 pr-3">
-                  <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $rec['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($rec['status']) ?></span>
+                  <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $rec['status']==='Active' ? badge_class('success') : badge_class('neutral') ?>"><?= e($rec['status']) ?></span>
                 </td>
-                <td class="py-2.5 text-right print:hidden">
+                <td class="py-2.5 text-right whitespace-nowrap min-w-[90px] print:hidden">
                   <?php if ($rec['employment_status'] === 'For Review' && $canActOnReview): ?>
                     <button type="button" @click="confirmHireRecordId = <?= (int)$rec['id'] ?>" class="text-slate-500 hover:text-emerald-600 px-1" title="Confirm Hired"><i class="fa-solid fa-handshake"></i></button>
                     <form method="POST" class="inline">
@@ -707,7 +727,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                           <select name="vacancy_id" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4">
                             <option value="">Select a Job Vacancy</option>
                             <?php foreach ($vacOptions as $v): ?>
-                              <option value="<?= (int)$v['id'] ?>"><?= e($v['position']) ?> (<?= e($v['job_level']) ?>, <?= (int)$v['vacant_count'] ?> open)</option>
+                              <option value="<?= (int)$v['id'] ?>"><?= e($v['position']) ?> (<?= e($v['job_level']) ?>, <?= (int)$v['vacant_count'] - (int)$v['filled_count'] ?> open)</option>
                             <?php endforeach; ?>
                           </select>
                           <?php else: ?>
@@ -814,15 +834,15 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <i class="fa-solid fa-handshake text-2xl mb-2 block"></i> No service availments yet.
           </div>
         <?php else: ?>
-        <div class="overflow-x-auto">
-          <table class="min-w-full text-sm">
+        <div class="w-full min-w-0 overflow-x-auto">
+          <table class="min-w-max w-full text-sm">
             <thead class="text-xs uppercase text-slate-500 border-b border-slate-100">
               <tr>
-                <th class="text-left py-2 pr-3">Agency</th>
-                <th class="text-left py-2 pr-3">Service</th>
-                <th class="text-left py-2 pr-3">Date Tagged</th>
-                <th class="text-left py-2 pr-3">Source</th>
-                <th class="text-left py-2 pr-3">Status</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Agency</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Service</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Date Tagged</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Source</th>
+                <th class="text-left py-2 pr-3 whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -833,7 +853,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <td class="py-2.5 pr-3"><?= format_date($sa['created_at']) ?></td>
                 <td class="py-2.5 pr-3"><?= e($sa['source'] === 'qr_scan' ? 'QR Scan' : 'Manual') ?></td>
                 <td class="py-2.5 pr-3">
-                  <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $sa['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($sa['status']) ?></span>
+                  <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $sa['status']==='Active' ? badge_class('success') : badge_class('neutral') ?>"><?= e($sa['status']) ?></span>
                 </td>
               </tr>
               <?php endforeach; ?>

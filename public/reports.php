@@ -16,6 +16,7 @@ $dateFrom     = clean($_GET['date_from'] ?? '');
 $dateTo       = clean($_GET['date_to'] ?? '');
 $filterYear   = clean($_GET['year'] ?? '');
 $filterAgency = (int)($_GET['agency_id'] ?? 0);
+$filterVacancyStatus = clean($_GET['vacancy_status'] ?? 'All');
 $currentYear  = (int)date('Y');
 $fromYear     = (int)($_GET['from_year'] ?? 0) ?: $currentYear - 4;
 $toYear       = (int)($_GET['to_year'] ?? 0) ?: $currentYear;
@@ -24,15 +25,17 @@ if ($fromYear > $toYear) {
 }
 
 $reportOptions = $scopedAgencyId !== null ? [
-    'services_availed' => "Services Availed \xE2\x80\x94 My Agency's Applicants",
-    'all_hired'         => 'Applicants Hired by My Agency',
-    'not_hired'         => 'Applicants Not Hired by My Agency',
-    'yearly_summary'    => "My Agency's Yearly Summary",
+    'services_availed'    => "Services Availed \xE2\x80\x94 My Agency's Applicants",
+    'all_hired'            => 'Applicants Hired by My Agency',
+    'not_hired'            => 'Applicants Not Hired by My Agency',
+    'available_vs_filled'  => "My Agency's Available vs Filled Positions",
+    'yearly_summary'       => "My Agency's Yearly Summary",
 ] : [
-    'services_availed' => 'Services Availed',
-    'all_hired'         => 'All Hired Applicants',
-    'not_hired'         => 'Applicant that was not hired',
-    'yearly_summary'    => 'Summarize per participant per year',
+    'services_availed'    => 'Services Availed',
+    'all_hired'            => 'All Hired Applicants',
+    'not_hired'            => 'Applicant that was not hired',
+    'available_vs_filled'  => 'Report on Available vs Filled',
+    'yearly_summary'       => 'Summarize per participant per year',
 ];
 
 $agenciesList = $scopedAgencyId === null
@@ -66,17 +69,12 @@ $scalar = function (string $sql, array $params) use ($pdo): int {
     return (int)$stmt->fetchColumn();
 };
 
-/** Reconstructs a vacancy's originally-posted position count from its
- * current (already-decremented-on-hire) vacant_count plus however many
- * Hired rows already reference it — vacant_count alone only reflects
- * what's still open right now, not what was posted. */
+/** Total originally-posted position count for vacancies created in a given
+ * year. vacant_count is the fixed total an agency posted — it's never
+ * decremented on hire (Filled positions are derived separately via a live
+ * COUNT of Hired employment records), so a plain SUM is exactly this. */
 $vacanciesPostedInYear = function (int $year, ?int $agencyId) use ($pdo): int {
-    $sql = "SELECT COALESCE(SUM(
-                v.vacant_count + (
-                    SELECT COUNT(*) FROM care_jf_employment_records er2
-                    WHERE er2.vacancy_id = v.id AND er2.employment_status = 'Hired'
-                )
-            ), 0)
+    $sql = "SELECT COALESCE(SUM(v.vacant_count), 0)
             FROM care_jf_job_vacancies v
             WHERE YEAR(v.created_at) = :y";
     $params = [':y' => $year];
@@ -96,6 +94,8 @@ $hiredTotal = 0;
 $notHiredGroups = null;
 $notHiredTotal = 0;
 $registeredNoApply = null;
+$availVsFilledGroups = null;
+$availVsFilledTotals = ['vacant' => 0, 'filled' => 0];
 $yearlyRows = null;
 
 if ($reportType && isset($reportOptions[$reportType])) {
@@ -200,6 +200,42 @@ if ($reportType && isset($reportOptions[$reportType])) {
             }
             break;
 
+        case 'available_vs_filled':
+            // "Filled" here means the same thing it means on the Job
+            // Vacancies page: a live COUNT of Hired employment records
+            // against the vacancy, never a stored/decremented number —
+            // vacant_count is the fixed total posted, open to the public.
+            $sql = "SELECT jv.id, jv.position, jv.job_level, jv.vacant_count, jv.status,
+                           pa.agency_name,
+                           (SELECT COUNT(*) FROM care_jf_employment_records er
+                             WHERE er.vacancy_id = jv.id AND er.employment_status = 'Hired') AS filled_count
+                    FROM care_jf_job_vacancies jv
+                    JOIN care_jf_partner_agencies pa ON pa.id = jv.agency_id";
+            $where = [];
+            $params = [];
+            if ($scopedAgencyId !== null) {
+                $where[] = 'jv.agency_id = :aid'; $params[':aid'] = $scopedAgencyId;
+            } elseif ($filterAgency) {
+                $where[] = 'jv.agency_id = :fa'; $params[':fa'] = $filterAgency;
+            }
+            if ($filterVacancyStatus !== '' && $filterVacancyStatus !== 'All') {
+                $where[] = 'jv.status = :vst'; $params[':vst'] = $filterVacancyStatus;
+            }
+            if ($where) {
+                $sql .= ' WHERE ' . implode(' AND ', $where);
+            }
+            $sql .= ' ORDER BY pa.agency_name, jv.position';
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+
+            $availVsFilledGroups = [];
+            foreach ($stmt->fetchAll() as $r) {
+                $availVsFilledGroups[$r['agency_name']][] = $r;
+                $availVsFilledTotals['vacant'] += (int)$r['vacant_count'];
+                $availVsFilledTotals['filled'] += (int)$r['filled_count'];
+            }
+            break;
+
         case 'yearly_summary':
             $yearlyRows = [];
             for ($y = $toYear; $y >= $fromYear; $y--) {
@@ -233,11 +269,13 @@ if ($reportType && isset($reportOptions[$reportType])) {
     if (isset($_GET['export']) && $_GET['export'] === 'xlsx') {
         $filename = preg_replace('/\W+/', '_', $reportLabel) . '_' . date('Ymd') . '.xlsx';
         $metaLines = [
-            'Civil Service Commission RO VIII',
-            'Job Applicants ' . date('Y'),
-            'Generated: ' . date('F j, Y g:i A'),
+            'Civil Service Commission',
+            'Regional Office VIII',
+            $reportLabel,
+            'Generated: ' . date('F j, Y'),
         ];
         $exportRows = [];
+        $boldRowIndexes = [];
 
         switch ($reportType) {
             case 'services_availed':
@@ -288,6 +326,33 @@ if ($reportType && isset($reportOptions[$reportType])) {
                 }
                 break;
 
+            case 'available_vs_filled':
+                // Seq leads (not Agency/Office) per requested column order.
+                // A blank row is inserted after each agency's Total row so
+                // the end of one agency's block is visually obvious before
+                // the next agency's rows begin; Total/Grand Total rows are
+                // marked bold via $boldRowIndexes (applied in stream_xlsx()).
+                $headers = ['Seq', 'Agency/Office', 'Position', 'Job Level', 'Status', 'Vacant (Available)', 'Filled (Hired)', 'Remaining'];
+                foreach ($availVsFilledGroups ?? [] as $agencyName => $rows) {
+                    $seq = 0;
+                    $agencyVacant = 0;
+                    $agencyFilled = 0;
+                    foreach ($rows as $r) {
+                        $seq++;
+                        $vacant = (int)$r['vacant_count'];
+                        $filled = (int)$r['filled_count'];
+                        $agencyVacant += $vacant;
+                        $agencyFilled += $filled;
+                        $exportRows[] = [$seq, $agencyName, $r['position'], $r['job_level'], $r['status'], $vacant, $filled, max(0, $vacant - $filled)];
+                    }
+                    $exportRows[] = ['', $agencyName . ' Total', '', '', '', $agencyVacant, $agencyFilled, max(0, $agencyVacant - $agencyFilled)];
+                    $boldRowIndexes[] = count($exportRows) - 1;
+                    $exportRows[] = [];
+                }
+                $exportRows[] = ['', 'GRAND TOTAL', '', '', '', $availVsFilledTotals['vacant'], $availVsFilledTotals['filled'], max(0, $availVsFilledTotals['vacant'] - $availVsFilledTotals['filled'])];
+                $boldRowIndexes[] = count($exportRows) - 1;
+                break;
+
             case 'yearly_summary':
                 $headers = ['Year', $scopedAgencyId === null ? 'Total Job Seeker' : 'Total Applicants Engaged', 'Total Hired', 'Total Not Hired', 'Total Participating Agency', 'Total Job Vacancies', 'Total Vacancies Filled'];
                 foreach ($yearlyRows ?? [] as $y => $m) {
@@ -299,7 +364,7 @@ if ($reportType && isset($reportOptions[$reportType])) {
                 $headers = [];
         }
 
-        stream_xlsx($filename, $reportLabel, $metaLines, $headers, $exportRows);
+        stream_xlsx($filename, $reportLabel, $metaLines, $headers, $exportRows, $boldRowIndexes, false);
     }
 }
 
@@ -344,7 +409,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </select>
     </div>
     <?php if ($agenciesList): ?>
-    <div x-show="rt === 'all_hired' || rt === 'not_hired'" x-cloak>
+    <div x-show="rt === 'all_hired' || rt === 'not_hired' || rt === 'available_vs_filled'" x-cloak>
       <label class="block text-sm font-medium text-slate-700 mb-1">Partner Agency</label>
       <select name="agency_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
         <option value="0">All Agencies</option>
@@ -354,6 +419,15 @@ require_once __DIR__ . '/../includes/sidebar.php';
       </select>
     </div>
     <?php endif; ?>
+
+    <div x-show="rt === 'available_vs_filled'" x-cloak>
+      <label class="block text-sm font-medium text-slate-700 mb-1">Vacancy Status</label>
+      <select name="vacancy_status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+        <?php foreach (['All', 'Active', 'Disabled', 'Filled', 'Closed'] as $opt): ?>
+          <option value="<?= e($opt) ?>" <?= $filterVacancyStatus === $opt ? 'selected' : '' ?>><?= e($opt) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
     <div x-show="rt === 'all_hired'" x-cloak>
       <label class="block text-sm font-medium text-slate-700 mb-1">Date Hired From</label>
       <input type="date" name="date_from" value="<?= e($dateFrom) ?>" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -441,8 +515,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div>
           <h3 class="font-semibold text-slate-700 mb-2">Table <?= ['job_seeker_only'=>'A','agency_only'=>'B','both'=>'C'][$key] ?> &mdash; <?= e($label) ?> (<?= count($svcBuckets[$key]) ?>)</h3>
           <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+            <table class="min-w-max w-full text-sm">
+              <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
                 <tr>
                   <th class="px-3 py-2 text-left">Seq.</th>
                   <th class="px-3 py-2 text-left">Applicant ID</th>
@@ -480,8 +554,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
         <div>
           <h3 class="font-semibold text-slate-700 mb-2"><?= e($agencyName) ?></h3>
           <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+            <table class="min-w-max w-full text-sm">
+              <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
                 <tr>
                   <th class="px-3 py-2 text-left">Seq.</th>
                   <th class="px-3 py-2 text-left">Applicant ID</th>
@@ -503,7 +577,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                   <td class="px-3 py-2"><?= e(report_services_label($r)) ?></td>
                   <td class="px-3 py-2"><?= e(report_eligibility_label($r)) ?></td>
                   <td class="px-3 py-2"><?= format_date($r['date_hired']) ?></td>
-                  <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Hired</span></td>
+                  <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium <?= badge_class('success') ?>">Hired</span></td>
                 </tr>
                 <?php endforeach; ?>
               </tbody>
@@ -530,8 +604,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <div class="mb-6">
             <h4 class="font-medium text-slate-700 mb-2"><?= e($agencyName) ?></h4>
             <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+              <table class="min-w-max w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
                   <tr>
                     <th class="px-3 py-2 text-left">Seq.</th>
                     <th class="px-3 py-2 text-left">Applicant ID</th>
@@ -553,7 +627,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                     <td class="px-3 py-2"><?= e(report_services_label($r)) ?></td>
                     <td class="px-3 py-2"><?= e(report_eligibility_label($r)) ?></td>
                     <td class="px-3 py-2">N/A</td>
-                    <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Not Hired</span></td>
+                    <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium <?= badge_class('warning') ?>">Not Hired</span></td>
                   </tr>
                   <?php endforeach; ?>
                 </tbody>
@@ -575,8 +649,8 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <div>
         <h3 class="font-semibold text-slate-700 mb-2">Registered but Didn't Apply (<?= count($registeredNoApply) ?>)</h3>
         <div class="overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+          <table class="min-w-max w-full text-sm">
+            <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
               <tr>
                 <th class="px-3 py-2 text-left">Seq.</th>
                 <th class="px-3 py-2 text-left">Applicant ID</th>
@@ -603,13 +677,86 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <td class="px-3 py-2">N/A</td>
                 <td class="px-3 py-2"><?= e(report_eligibility_label($r)) ?></td>
                 <td class="px-3 py-2">N/A</td>
-                <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">Registered &mdash; Did Not Apply</span></td>
+                <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium <?= badge_class('neutral') ?>">Registered &mdash; Did Not Apply</span></td>
               </tr>
               <?php endforeach; ?>
             </tbody>
           </table>
         </div>
       </div>
+      <?php endif; ?>
+
+    <?php elseif ($reportType === 'available_vs_filled'): ?>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div class="rounded-lg bg-blue-50 p-3">
+          <p class="text-xs text-blue-700">Total Vacant (Available to Public)</p>
+          <p class="text-xl font-bold text-blue-800"><?= $availVsFilledTotals['vacant'] ?></p>
+        </div>
+        <div class="rounded-lg bg-purple-50 p-3">
+          <p class="text-xs text-purple-700">Total Filled (Hired)</p>
+          <p class="text-xl font-bold text-purple-800"><?= $availVsFilledTotals['filled'] ?></p>
+        </div>
+        <div class="rounded-lg bg-slate-50 p-3">
+          <p class="text-xs text-slate-500">Remaining Openings</p>
+          <p class="text-xl font-bold text-slate-800"><?= max(0, $availVsFilledTotals['vacant'] - $availVsFilledTotals['filled']) ?></p>
+        </div>
+      </div>
+
+      <?php if (!$availVsFilledGroups): ?>
+        <p class="text-center text-slate-400 py-8">No job vacancies match this report.</p>
+      <?php endif; ?>
+      <?php foreach ($availVsFilledGroups ?? [] as $agencyName => $rows): ?>
+        <?php
+          $agencyVacant = array_sum(array_map(fn($r) => (int)$r['vacant_count'], $rows));
+          $agencyFilled = array_sum(array_map(fn($r) => (int)$r['filled_count'], $rows));
+        ?>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-2"><?= e($agencyName) ?></h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-max w-full text-sm">
+              <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
+                <tr>
+                  <th class="px-3 py-2 text-left">Seq.</th>
+                  <th class="px-3 py-2 text-left">Position</th>
+                  <th class="px-3 py-2 text-left">Job Level</th>
+                  <th class="px-3 py-2 text-left">Status</th>
+                  <th class="px-3 py-2 text-left">Vacant (Available)</th>
+                  <th class="px-3 py-2 text-left">Filled (Hired)</th>
+                  <th class="px-3 py-2 text-left">Remaining</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <?php foreach ($rows as $i => $r): ?>
+                <?php $vacant = (int)$r['vacant_count']; $filled = (int)$r['filled_count']; ?>
+                <tr>
+                  <td class="px-3 py-2"><?= $i + 1 ?></td>
+                  <td class="px-3 py-2 font-medium"><?= e($r['position']) ?></td>
+                  <td class="px-3 py-2"><?= e($r['job_level']) ?></td>
+                  <td class="px-3 py-2">
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium <?= $r['status']==='Active' ? badge_class('success') : ($r['status']==='Filled' ? badge_class('info') : badge_class('neutral')) ?>"><?= e($r['status']) ?></span>
+                  </td>
+                  <td class="px-3 py-2"><?= $vacant ?></td>
+                  <td class="px-3 py-2 font-medium <?= $filled >= $vacant ? 'text-red-600' : 'text-emerald-600' ?>"><?= $filled ?></td>
+                  <td class="px-3 py-2"><?= max(0, $vacant - $filled) ?></td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-50 font-semibold text-slate-700">
+                  <td colspan="4" class="px-3 py-2"><?= e($agencyName) ?> Total</td>
+                  <td class="px-3 py-2"><?= $agencyVacant ?></td>
+                  <td class="px-3 py-2"><?= $agencyFilled ?></td>
+                  <td class="px-3 py-2"><?= max(0, $agencyVacant - $agencyFilled) ?></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      <?php endforeach; ?>
+      <?php if ($availVsFilledGroups): ?>
+        <div class="text-right font-bold text-slate-800 border-t border-slate-200 pt-3">
+          GRAND TOTAL &mdash; Vacant: <?= $availVsFilledTotals['vacant'] ?> &nbsp;|&nbsp; Filled: <?= $availVsFilledTotals['filled'] ?> &nbsp;|&nbsp; Remaining: <?= max(0, $availVsFilledTotals['vacant'] - $availVsFilledTotals['filled']) ?>
+        </div>
       <?php endif; ?>
 
     <?php elseif ($reportType === 'yearly_summary'): ?>

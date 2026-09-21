@@ -157,7 +157,9 @@ if ($statusFilter !== '' && $statusFilter !== 'All') {
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $stmt = $pdo->prepare(
-    "SELECT jv.*, pa.agency_name
+    "SELECT jv.*, pa.agency_name,
+            (SELECT COUNT(*) FROM care_jf_employment_records er
+              WHERE er.vacancy_id = jv.id AND er.employment_status = 'Hired') AS filled_count
      FROM care_jf_job_vacancies jv
      JOIN care_jf_partner_agencies pa ON pa.id = jv.agency_id
      $whereSql ORDER BY jv.created_at DESC"
@@ -183,34 +185,49 @@ require_once __DIR__ . '/../includes/sidebar.php';
 ?>
 
 <div class="space-y-5" x-data="{ showCreate: false, editingId: null, deletingId: null, deletingPosition: '' }">
-  <div class="flex items-center justify-between flex-wrap gap-3 print:hidden">
-    <div>
-      <h1 class="text-2xl font-bold text-slate-800">Job Vacancies</h1>
-      <p class="text-sm text-slate-500"><?= $scopedAgencyId !== null ? 'Manage your agency\'s job openings.' : 'Manage job openings across all Partner Agencies.' ?></p>
-    </div>
-    <div class="flex gap-2 flex-wrap">
-      <?php if ($scopedAgencyId === null): ?>
-      <button type="button" onclick="window.print()" class="inline-flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg">
-        <i class="fa-solid fa-print"></i> Print
-      </button>
-      <?php endif; ?>
-      <button type="button" @click="showCreate = true" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
-        <i class="fa-solid fa-plus"></i> Add Vacancy
-      </button>
-    </div>
+  <div class="print:hidden">
+    <h1 class="text-2xl font-bold text-slate-800">Job Vacancies</h1>
+    <p class="text-sm text-slate-500"><?= $scopedAgencyId !== null ? 'Manage your agency\'s job openings.' : 'Manage job openings across all Partner Agencies.' ?></p>
   </div>
 
-  <form method="GET" class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-wrap gap-3 print:hidden">
-    <input type="text" name="search" value="<?= e($search) ?>" placeholder="Search position or title..." class="flex-1 min-w-[200px] rounded-lg border border-slate-300 text-sm py-2 px-3">
-    <select name="status" class="rounded-lg border border-slate-300 text-sm py-2 px-3">
-      <option value="All" <?= $statusFilter==='All'?'selected':'' ?>>All Status</option>
-      <?php foreach ($statusOptions as $opt): ?>
-        <option value="<?= e($opt) ?>" <?= $statusFilter===$opt?'selected':'' ?>><?= e($opt) ?></option>
-      <?php endforeach; ?>
-    </select>
-    <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium">Search</button>
-    <a href="vacancies.php" class="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">Reset</a>
-  </form>
+  <!-- Vacancy Actions, Search & Filters -->
+  <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 print:hidden">
+    <h2 class="text-sm font-semibold text-slate-700 mb-3">Vacancy Actions</h2>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button type="button" @click="showCreate = true" class="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm">
+          <i class="fa-solid fa-plus"></i> Add Vacancy
+        </button>
+      </div>
+      <a href="api/vacancies-export.php?<?= e(http_build_query(['search' => $search, 'status' => $statusFilter])) ?>"
+         class="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg">
+        <i class="fa-solid fa-file-excel"></i> Export to Excel
+      </a>
+    </div>
+
+    <hr class="my-4 border-slate-100">
+
+    <h2 class="text-sm font-semibold text-slate-700 mb-3">Search Job Vacancies</h2>
+    <form method="GET" class="flex flex-col sm:flex-row gap-3">
+      <div class="relative flex-1">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+        <input type="text" name="search" value="<?= e($search) ?>" placeholder="Search position or title..."
+               class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm">
+      </div>
+      <select name="status" class="rounded-lg border border-slate-300 text-sm py-2 px-3 sm:w-48">
+        <option value="All" <?= $statusFilter==='All'?'selected':'' ?>>All Status</option>
+        <?php foreach ($statusOptions as $opt): ?>
+          <option value="<?= e($opt) ?>" <?= $statusFilter===$opt?'selected':'' ?>><?= e($opt) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium">Search</button>
+    </form>
+    <div class="flex justify-end mt-3">
+      <a href="vacancies.php" class="text-sm text-slate-500 hover:text-slate-700 font-medium">
+        <i class="fa-solid fa-rotate-left mr-1"></i> Reset Filters
+      </a>
+    </div>
+  </div>
 
   <!-- Add form: real modal, does not close on outside click -->
   <div x-show="showCreate" x-cloak
@@ -256,6 +273,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">No. of Vacancies <span class="text-red-500">*</span></label>
             <input type="number" name="vacant_count" value="1" min="1" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <p class="text-xs text-slate-400 mt-1">Total positions being posted. This stays fixed as hires are confirmed — see the Filled column for how many are taken.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Position Status</label>
@@ -316,6 +334,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <th class="px-2 py-1.5 text-left border border-slate-300">Job Level</th>
               <th class="px-2 py-1.5 text-left border border-slate-300">Salary Grade</th>
               <th class="px-2 py-1.5 text-left border border-slate-300">Vacant</th>
+              <th class="px-2 py-1.5 text-left border border-slate-300">Filled</th>
               <th class="px-2 py-1.5 text-left border border-slate-300">Status</th>
             </tr>
           </thead>
@@ -326,6 +345,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <td class="px-2 py-1.5 border border-slate-300"><?= e($av['job_level']) ?></td>
                 <td class="px-2 py-1.5 border border-slate-300"><?= e($av['salary_grade'] ?: '—') ?></td>
                 <td class="px-2 py-1.5 border border-slate-300"><?= (int)$av['vacant_count'] ?></td>
+                <td class="px-2 py-1.5 border border-slate-300"><?= (int)$av['filled_count'] ?></td>
                 <td class="px-2 py-1.5 border border-slate-300"><?= e($av['status']) ?></td>
               </tr>
             <?php endforeach; ?>
@@ -337,32 +357,37 @@ require_once __DIR__ . '/../includes/sidebar.php';
   <?php endif; ?>
 
   <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden print:hidden">
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm responsive-cards">
-        <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+    <div class="w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[65vh]">
+      <table class="min-w-max w-full text-sm">
+        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
           <tr>
-            <?php if ($scopedAgencyId === null): ?><th class="px-4 py-2.5 text-left">Agency</th><?php endif; ?>
-            <th class="px-4 py-2.5 text-left">Position</th>
-            <th class="px-4 py-2.5 text-left">Job Level</th>
-            <th class="px-4 py-2.5 text-left">Vacant</th>
-            <th class="px-4 py-2.5 text-left">Status</th>
-            <th class="px-4 py-2.5 text-right">Actions</th>
+            <?php if ($scopedAgencyId === null): ?><th class="px-4 py-2.5 text-left whitespace-nowrap">Agency</th><?php endif; ?>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Position</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Job Level</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Vacant</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Filled</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Status</th>
+            <th class="px-4 py-2.5 text-right whitespace-nowrap min-w-[110px]">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 bg-white">
           <?php if (!$vacancies): ?>
-            <tr><td colspan="<?= $scopedAgencyId === null ? 6 : 5 ?>" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-briefcase text-2xl mb-2 block"></i> No job vacancies found.</td></tr>
+            <tr><td colspan="<?= $scopedAgencyId === null ? 7 : 6 ?>" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-briefcase text-2xl mb-2 block"></i> No job vacancies found.</td></tr>
           <?php endif; ?>
           <?php foreach ($vacancies as $v): ?>
-          <tr>
+          <tr class="hover:bg-slate-50">
             <?php if ($scopedAgencyId === null): ?><td class="px-4 py-3" data-label="Agency"><?= e($v['agency_name']) ?></td><?php endif; ?>
             <td class="px-4 py-3 font-medium" data-label="Position"><?= e($v['position']) ?><p class="text-xs text-slate-400 font-normal"><?= e($v['title']) ?></p></td>
             <td class="px-4 py-3" data-label="Job Level"><?= e($v['job_level']) ?></td>
             <td class="px-4 py-3" data-label="Vacant"><?= (int)$v['vacant_count'] ?></td>
-            <td class="px-4 py-3" data-label="Status">
-              <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $v['status']==='Active' ? 'bg-green-100 text-green-700' : ($v['status']==='Filled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600') ?>"><?= e($v['status']) ?></span>
+            <td class="px-4 py-3" data-label="Filled">
+              <span class="font-medium <?= (int)$v['filled_count'] >= (int)$v['vacant_count'] ? 'text-red-600' : 'text-emerald-600' ?>"><?= (int)$v['filled_count'] ?></span>
+              <span class="text-slate-400"> / <?= (int)$v['vacant_count'] ?></span>
             </td>
-            <td class="px-4 py-3 text-right" data-label="Actions">
+            <td class="px-4 py-3" data-label="Status">
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $v['status']==='Active' ? badge_class('success') : ($v['status']==='Filled' ? badge_class('info') : badge_class('neutral')) ?>"><?= e($v['status']) ?></span>
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap min-w-[110px]" data-label="Actions">
               <button type="button" @click="editingId = editingId === <?= (int)$v['id'] ?> ? null : <?= (int)$v['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></button>
               <form method="POST" class="inline">
                 <?= csrf_field() ?>
@@ -379,7 +404,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
           </tr>
           <!-- Inline edit row -->
           <tr x-show="editingId === <?= (int)$v['id'] ?>" x-cloak>
-            <td colspan="<?= $scopedAgencyId === null ? 6 : 5 ?>" class="px-4 py-4 bg-slate-50">
+            <td colspan="<?= $scopedAgencyId === null ? 7 : 6 ?>" class="px-4 py-4 bg-slate-50">
               <form method="POST" class="grid sm:grid-cols-3 gap-3" onsubmit="return validateForm(this);">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="edit">
@@ -411,6 +436,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1">No. of Vacant Positions</label>
                   <input type="number" name="vacant_count" min="0" value="<?= (int)$v['vacant_count'] ?>" class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+                  <p class="text-xs text-slate-400 mt-1">Total posted; not auto-reduced by hires (<?= (int)$v['filled_count'] ?> filled so far).</p>
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1">Status</label>

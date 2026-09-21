@@ -132,21 +132,21 @@ require_once __DIR__ . '/../includes/sidebar.php';
       <hr class="mt-4 border-slate-300">
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm responsive-cards">
-        <thead class="bg-slate-50 text-slate-600 text-xs uppercase print:bg-transparent">
+    <div class="w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[65vh] print:max-h-none print:overflow-visible">
+      <table class="min-w-max w-full text-sm">
+        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide print:bg-transparent sticky top-0 z-10 print:static">
           <tr>
-            <th class="px-4 py-2.5 text-left">Agency / Office Name</th>
-            <th class="px-4 py-2.5 text-left">Contact Person</th>
-            <th class="px-4 py-2.5 text-left">Contact No</th>
-            <th class="px-4 py-2.5 text-left">Email</th>
-            <th class="px-4 py-2.5 text-left">Employment Records</th>
-            <th class="px-4 py-2.5 text-left">Services</th>
-            <th class="px-4 py-2.5 text-left">Status</th>
-            <th class="px-4 py-2.5 text-right print:hidden">Actions</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Agency / Office Name</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Contact Person</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Contact No</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Email</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Employment Records</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Services</th>
+            <th class="px-4 py-2.5 text-left whitespace-nowrap">Status</th>
+            <th class="px-4 py-2.5 text-right whitespace-nowrap min-w-[90px] print:hidden">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 bg-white">
           <?php if (!$agencies): ?>
             <tr><td colspan="8" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No partner agencies found.</td></tr>
           <?php endif; ?>
@@ -159,9 +159,9 @@ require_once __DIR__ . '/../includes/sidebar.php';
             <td class="px-4 py-3" data-label="Records"><?= (int)$ag['record_count'] ?></td>
             <td class="px-4 py-3" data-label="Services"><?= (int)$ag['active_service_count'] ?></td>
             <td class="px-4 py-3" data-label="Status">
-              <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $ag['status']==='Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>"><?= e($ag['status']) ?></span>
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $ag['status']==='Active' ? badge_class('success') : badge_class('neutral') ?>"><?= e($ag['status']) ?></span>
             </td>
-            <td class="px-4 py-3 text-right print:hidden" data-label="Actions">
+            <td class="px-4 py-3 text-right whitespace-nowrap min-w-[90px] print:hidden" data-label="Actions">
               <?php if (can_manage_agency()): ?>
               <a href="partner-agency-form.php?id=<?= (int)$ag['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></a>
               <form method="POST" class="inline">

@@ -82,3 +82,253 @@ th.sortable:hover { background-color: rgba(0,0,0,0.03); }
   0% { background-position: 100% 50%; }
   100% { background-position: 0 50%; }
 }
+
+/* =====================================================================
+ * LIGHT / DARK THEME SYSTEM
+ * =====================================================================
+ * Toggled by an `html.dark` class (set from localStorage/system
+ * preference — see includes/header.php and public/login.php's inline
+ * init script, and the toggleTheme() helper in assets/js/app.js).
+ *
+ * Semantic roles used throughout the app and how each maps to a
+ * concrete Tailwind utility class already in use (light) vs. the dark
+ * override defined below:
+ *
+ *   Background        body (bg-slate-50, page-level only)
+ *   Surface           bg-white               (cards, modals, panels)
+ *   Surface Secondary bg-slate-50/bg-gray-50 (thead, hover rows, info chips — an
+ *                     accent tier ABOVE Surface, not the page background)
+ *   Surface Tertiary  bg-slate-100/bg-gray-100 (neutral chips, disabled fields)
+ *   Border            border-slate-100/200, divide-slate-100
+ *   Border (strong)   border-slate-300 (inputs)
+ *   Primary Text      text-slate-800/900
+ *   Secondary Text    text-slate-600/700
+ *   Muted Text        text-slate-400/500, placeholders
+ *   Primary Action    bg-brand-600/700 (solid buttons — unchanged in dark;
+ *                     already reads fine on both backgrounds)
+ *   Success/Warning/  the -50/-100 badge-chip background + -700/-800 badge
+ *   Danger/Info       text pairs from badge_class() and friends
+ *
+ * Rather than sprinkling `dark:` variants across ~25 PHP files, this
+ * project reuses one fixed, already-established vocabulary of Tailwind
+ * utility classes (see the design-system pass documented in
+ * docs/superpowers/ for that vocabulary). So each of those exact
+ * classes gets a single dark-mode override rule here, scoped under
+ * `html.dark`, which — by CSS specificity (html.dark X beats X) —
+ * repaints every page, card, table, form, and modal that already uses
+ * that class, with no per-page edits required. New markup should still
+ * prefer Tailwind's own `dark:` variant (enabled via darkMode:'class'
+ * in tailwind.config.js) where that reads more clearly than adding to
+ * this list.
+ *
+ * Wrapped in `@media screen` throughout so printing (Applicant
+ * profiles, Employment records, Job Vacancies summaries, Reports —
+ * see their existing print:* classes) always renders in the original
+ * light palette, regardless of the active on-screen theme.
+ * ===================================================================== */
+
+:root {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+@media screen {
+  html.dark {
+    background-color: #0d1220;
+  }
+
+  /* ---- Surfaces ---------------------------------------------------- */
+  html.dark .bg-white { background-color: #161c2c; }
+  /* Page background — more specific than the plain .bg-slate-50 rule
+   * below, so it wins on <body> without affecting slate-50 used as an
+   * accent tier inside a card (thead, hover rows, info chips). */
+  html.dark body.bg-slate-50 { background-color: #0d1220; }
+  html.dark .bg-slate-50,
+  html.dark .bg-gray-50,
+  html.dark .hover\:bg-slate-50:hover { background-color: #1e2438; }
+  html.dark .bg-slate-100,
+  html.dark .bg-gray-100 { background-color: #262e46; }
+
+  /* ---- Borders / dividers ------------------------------------------ */
+  html.dark .border-slate-100,
+  html.dark .border-slate-200,
+  html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #2a3350; }
+  html.dark .border-slate-300,
+  html.dark .hover\:border-slate-300:hover { border-color: #3d4970; }
+
+  /* ---- Shadows -------------------------------------------------------
+   * Tailwind's shadow-* utilities are black-tinted rgba values, which
+   * render as essentially invisible against an already-dark page
+   * background — a card with shadow-sm reads as flat/borderless in dark
+   * mode without this. Pairs a deeper black offset (for actual depth)
+   * with a faint light edge (so the card silhouette itself is legible,
+   * the same trick used by most dark-mode design systems). */
+  html.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05); }
+  html.dark .shadow,
+  html.dark .shadow-md,
+  html.dark .hover\:shadow-md:hover { box-shadow: 0 4px 12px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07); }
+  html.dark .shadow-lg,
+  html.dark .hover\:shadow-lg:hover { box-shadow: 0 10px 24px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
+
+  /* ---- Text ---------------------------------------------------------*/
+  html.dark .text-slate-800,
+  html.dark .text-slate-900 { color: #eef1f8; }
+  html.dark .text-slate-700,
+  html.dark .hover\:text-slate-700:hover,
+  html.dark .text-gray-700 { color: #d7dcec; }
+  html.dark .text-slate-600,
+  html.dark .hover\:text-slate-600:hover,
+  html.dark .text-gray-600 { color: #b7bfd8; }
+  html.dark .text-slate-500,
+  html.dark .text-gray-500 { color: #9aa3c2; }
+  html.dark .text-slate-400,
+  html.dark .placeholder\:text-slate-400::placeholder { color: #7e87a8; }
+  html.dark .text-slate-300 { color: #5c6584; }
+
+  /* ---- Brand accent (links/labels — buttons keep bg-brand-600/700
+   * unchanged, already readable on both backgrounds) ------------------*/
+  html.dark .bg-brand-50,
+  html.dark .hover\:bg-brand-50:hover { background-color: #172047; }
+  html.dark .text-brand-600,
+  html.dark .text-brand-700 { color: #9db0ff; }
+  html.dark .text-brand-800 { color: #c3cdff; }
+  html.dark .hover\:text-brand-600:hover,
+  html.dark .hover\:text-brand-700:hover,
+  html.dark .hover\:text-brand-800:hover { color: #b9c4ff; }
+  html.dark .border-brand-500,
+  html.dark .focus\:border-brand-500:focus { border-color: #5c82ff; }
+  html.dark .ring-brand-100,
+  html.dark .focus\:ring-brand-100:focus { --tw-ring-color: rgb(92 130 255 / 0.35); }
+
+  /* ---- Status/semantic badge + chip colors --------------------------
+   * Pattern per family: -50/-100 background (badge/chip fill) darkens
+   * to that family's own 950/900 shade; -500/-600/-700/-800 text
+   * lightens to that family's own 400/300 shade — borrowed directly
+   * from Tailwind's own palette, so contrast is already well-tested. */
+  html.dark .bg-red-50 { background-color: #450a0a; }
+  html.dark .bg-red-100,
+  html.dark .hover\:bg-red-100:hover { background-color: #7f1d1d; }
+  html.dark .border-red-200 { border-color: #991b1b; }
+  html.dark .text-red-400,
+  html.dark .text-red-500,
+  html.dark .text-red-600,
+  html.dark .hover\:text-red-600:hover { color: #f87171; }
+  html.dark .text-red-700 { color: #fca5a5; }
+  html.dark .ring-red-500,
+  html.dark .border-red-500 { border-color: #f87171; --tw-ring-color: #f87171; }
+
+  html.dark .bg-amber-50 { background-color: #451a03; }
+  html.dark .bg-amber-100,
+  html.dark .hover\:bg-amber-100:hover { background-color: #78350f; }
+  html.dark .border-amber-100,
+  html.dark .border-amber-200 { border-color: #92400e; }
+  html.dark .text-amber-500,
+  html.dark .text-amber-600,
+  html.dark .hover\:text-amber-600:hover { color: #fbbf24; }
+  html.dark .text-amber-700,
+  html.dark .text-amber-800 { color: #fcd34d; }
+
+  html.dark .bg-yellow-50 { background-color: #422006; }
+  html.dark .bg-yellow-100 { background-color: #713f12; }
+  html.dark .text-yellow-700,
+  html.dark .text-yellow-800 { color: #fde047; }
+
+  html.dark .bg-orange-100 { background-color: #7c2d12; }
+  html.dark .text-orange-800 { color: #fdba74; }
+
+  html.dark .bg-green-50 { background-color: #052e16; }
+  html.dark .bg-green-100 { background-color: #14532d; }
+  html.dark .text-green-500,
+  html.dark .text-green-600 { color: #4ade80; }
+  html.dark .text-green-700,
+  html.dark .text-green-800 { color: #86efac; }
+
+  html.dark .bg-emerald-50 { background-color: #022c22; }
+  html.dark .bg-emerald-100 { background-color: #064e3b; }
+  html.dark .text-emerald-600,
+  html.dark .hover\:text-emerald-600:hover { color: #34d399; }
+  html.dark .text-emerald-700,
+  html.dark .text-emerald-800,
+  html.dark .hover\:text-emerald-800:hover { color: #6ee7b7; }
+
+  html.dark .bg-teal-100 { background-color: #134e4a; }
+  html.dark .text-teal-800 { color: #5eead4; }
+
+  html.dark .bg-blue-50 { background-color: #172554; }
+  html.dark .bg-blue-100 { background-color: #1e3a8a; }
+  html.dark .text-blue-600,
+  html.dark .hover\:text-blue-600:hover { color: #60a5fa; }
+  html.dark .text-blue-700,
+  html.dark .text-blue-800 { color: #93c5fd; }
+
+  html.dark .bg-indigo-50 { background-color: #1e1b4b; }
+  html.dark .bg-indigo-100 { background-color: #312e81; }
+  html.dark .text-indigo-700 { color: #a5b4fc; }
+
+  html.dark .bg-purple-50 { background-color: #3b0764; }
+  html.dark .bg-purple-100 { background-color: #581c87; }
+  html.dark .text-purple-600,
+  html.dark .hover\:text-purple-600:hover { color: #c084fc; }
+  html.dark .text-purple-700,
+  html.dark .text-purple-800 { color: #d8b4fe; }
+
+  html.dark .bg-pink-50 { background-color: #500724; }
+  html.dark .text-pink-600 { color: #f472b6; }
+
+  /* ---- Form controls -------------------------------------------------
+   * No input/select/textarea in this codebase carries an explicit
+   * bg-* class (they rely on the browser default), so a blanket rule
+   * is the only way to stop them staying white in Dark Mode. */
+  html.dark input:not([type="checkbox"]):not([type="radio"]),
+  html.dark select,
+  html.dark textarea {
+    background-color: #1c2338;
+    color: #eef1f8;
+    border-color: #3d4970;
+  }
+  html.dark input::placeholder,
+  html.dark textarea::placeholder { color: #7e87a8; }
+  html.dark input:disabled,
+  html.dark select:disabled,
+  html.dark textarea:disabled {
+    background-color: #262e46;
+    color: #7e87a8;
+  }
+  input[type="checkbox"], input[type="radio"] { accent-color: #2947d1; }
+
+  /* ---- Misc ----------------------------------------------------------*/
+  html.dark th.sortable:hover { background-color: rgba(255, 255, 255, 0.04); }
+  html.dark table.responsive-cards tr { border-color: #2a3350; }
+  html.dark table.responsive-cards td { border-bottom-color: #2a3350; }
+  html.dark table.responsive-cards td::before { color: #9aa3c2; }
+  html.dark .skeleton {
+    background: linear-gradient(90deg, #1e2438 25%, #262e46 37%, #1e2438 63%);
+    background-size: 400% 100%;
+  }
+
+  /* Dark scrollbars — only overridden under html.dark; light mode keeps
+   * the browser default, per "don't introduce excessive custom
+   * scrollbar styling if the defaults are already appropriate". */
+  html.dark { scrollbar-color: #3d4970 #161c2c; scrollbar-width: thin; }
+  html.dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+  html.dark ::-webkit-scrollbar-track { background: #161c2c; }
+  html.dark ::-webkit-scrollbar-thumb { background: #3d4970; border-radius: 9999px; }
+  html.dark ::-webkit-scrollbar-thumb:hover { background: #4a5788; }
+}
+
+/* Theme toggle button (sidebar + mobile top bar + login page) */
+.theme-toggle {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle { transition: none; }
+}

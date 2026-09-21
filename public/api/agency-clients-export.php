@@ -1,30 +1,24 @@
 <?php
 /**
- * api/agency-clients.php — AJAX search/filter/pagination for a Partner
- * Agency's own Clients list (public/clients.php's Partner-Agency-role
- * branch). Scoped exclusively to the authenticated agency's own
- * care_jf_service_availments rows — never trusts a posted/URL agency id.
- * Mirrors api/applicants.php's shape (SQL_CALC_FOUND_ROWS, whitelisted
- * sort) for consistency, but the underlying data (Service Availed, Date
- * Availed, per-agency Status) lives on care_jf_service_availments, not
- * on the applicant row, so this is a separate query rather than a filter
- * added to api/applicants.php.
+ * api/agency-clients-export.php — streams a Partner Agency's own Clients
+ * list as an .xlsx download, honoring the exact same search/filter state
+ * as api/agency-clients.php's live table, via the shared
+ * build_agency_client_filters()/map_agency_client_row() helpers in
+ * functions.php. Exports every matching row (no LIMIT/OFFSET).
+ *
+ * A plain browser navigation (triggered via window.location.href, not
+ * fetch), so a 401/403 JSON blob would be poor UX — redirect to login
+ * (require_login()) and 403 via require_role() the same way the page
+ * itself is protected, rather than returning JSON.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
-
-header('Content-Type: application/json');
-
-if (!is_logged_in()) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
-    exit;
-}
+require_once __DIR__ . '/../../includes/xlsx_writer.php';
+require_login();
 
 if (!is_partner_agency()) {
     http_response_code(403);
-    echo json_encode(['error' => 'Forbidden']);
-    exit;
+    die('Forbidden.');
 }
 
 $pdo = Database::getConnection();
@@ -40,12 +34,10 @@ if (!in_array($sortCol, $allowedSort, true)) {
     $sortCol = 'sa.updated_at';
 }
 
-[$limit, $offset, $page] = paginate_params();
-
 $built = build_agency_client_filters($agencyId, ['search' => $search, 'service_availed' => $serviceAvailed]);
 
 $sql = "
-    SELECT SQL_CALC_FOUND_ROWS
+    SELECT
         a.id, a.applicant_code, a.last_name, a.first_name, a.middle_name, a.extension_name,
         a.sex, a.service_job_seeker, a.service_agency_services,
         sa.status AS availment_status, sa.updated_at AS date_availed,
@@ -55,26 +47,27 @@ $sql = "
     LEFT JOIN care_jf_agency_services asv ON asv.id = sa.service_id
     WHERE {$built['where']}
     ORDER BY $sortCol $sortDir
-    LIMIT :limit OFFSET :offset
 ";
 
 $stmt = $pdo->prepare($sql);
 foreach ($built['params'] as $key => $value) {
     $stmt->bindValue($key, $value);
 }
-$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
-$rows = $stmt->fetchAll();
+$rows = array_map('map_agency_client_row', $stmt->fetchAll());
 
-$total = (int)$pdo->query('SELECT FOUND_ROWS()')->fetchColumn();
+$headers = ['Application ID', 'Full Name', 'Sex', 'Services Registered', 'Service Availed', 'Status', 'Date Availed'];
+$exportRows = array_map(fn(array $r) => [
+    $r['applicant_code'], $r['full_name'], $r['sex'],
+    implode(', ', array_map('mb_strtoupper', $r['services_registered'])),
+    $r['service_availed'], $r['status'], $r['date_availed'],
+], $rows);
 
-$data = array_map('map_agency_client_row', $rows);
+$metaLines = [
+    'Generated: ' . date('F j, Y g:i A'),
+    'Total records: ' . count($rows),
+    'Agency: ' . current_agency_name($pdo),
+];
 
-echo json_encode([
-    'data'  => $data,
-    'total' => $total,
-    'page'  => $page,
-    'limit' => $limit,
-    'pages' => (int)ceil($total / $limit),
-]);
+$filename = 'Clients_' . date('Ymd_His') . '.xlsx';
+stream_xlsx($filename, 'Clients', $metaLines, $headers, $exportRows);

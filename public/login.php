@@ -24,23 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'login')
     } elseif (attempt_login($pdo, $username, $password)) {
         redirect('dashboard.php');
     } else {
-        $stmt = $pdo->prepare(
-            "SELECT u.status, u.role, pa.status AS agency_status
-             FROM care_jf_users u LEFT JOIN care_jf_partner_agencies pa ON pa.id = u.agency_id
-             WHERE u.username = :u LIMIT 1"
-        );
-        $stmt->execute([':u' => $username]);
-        $target = $stmt->fetch();
-
-        if ($target && $target['role'] === 'Partner Agency' && $target['status'] === 'Pending') {
-            $error = 'Your Partner Agency account is still pending Administrator approval.';
-        } elseif ($target && $target['role'] === 'Partner Agency' && ($target['status'] === 'Disabled' || $target['agency_status'] === 'Disabled')) {
-            $error = 'Your Partner Agency account has been disabled. Please contact the Administrator.';
-        } elseif ($target && $target['status'] !== 'Active') {
-            $error = 'Your account is pending administrator approval or has been disabled.';
-        } else {
-            $error = 'Invalid username or password, or your account is temporarily locked.';
-        }
+        // Deliberately one generic message for every failure reason (no
+        // such user, wrong password, pending approval, disabled account,
+        // disabled agency, or rate-limited) — branching this by account
+        // state lets an unauthenticated visitor enumerate which usernames
+        // exist and their status just by reading the error text back, with
+        // no working password needed. A genuinely pending/disabled user
+        // still can't log in either way; only that extra detail is lost.
+        $error = 'Invalid username or password, or your account is temporarily locked.';
     }
 }
 
@@ -133,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<?php require __DIR__ . '/../includes/theme-init.php'; ?>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login · CARE</title>
 <link rel="icon" type="image/png" href="assets/images/csc-logo.png">
@@ -142,7 +134,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'registe
 </head>
 <body class="min-h-screen" style="background: radial-gradient(circle at top, #1e2a5e 0%, #0f172a 70%); background-repeat: no-repeat; background-attachment: fixed; background-size: cover;">
 
-<div class="min-h-screen grid lg:grid-cols-2" x-data="{ panel: '<?= $activePanel ?>' }">
+<div class="min-h-screen grid lg:grid-cols-2" x-data="{ panel: '<?= $activePanel ?>', dark: document.documentElement.classList.contains('dark') }">
+
+  <button type="button" @click="dark = toggleAppTheme()" class="theme-toggle fixed top-4 right-4 z-10 text-white/90 hover:bg-white/10 bg-black/10"
+          :title="dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'" :aria-label="dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+    <i class="fa-solid" :class="dark ? 'fa-sun' : 'fa-moon'"></i>
+  </button>
 
   <!-- LEFT: system branding (unchanged) -->
   <div class="flex flex-col justify-center items-center lg:items-start text-center lg:text-left

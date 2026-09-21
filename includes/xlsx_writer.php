@@ -22,8 +22,12 @@ declare(strict_types=1);
  * @param array  $metaLines  Extra lines shown under the title (e.g. "Generated: ...")
  * @param array  $headers    Column header labels
  * @param array  $rows       Array of associative or indexed arrays; each inner value becomes one cell
+ * @param array  $boldRowIndexes  0-based indexes into $rows whose cells should render bold (e.g. subtotal/grand-total rows)
+ * @param bool   $includeTitleRow When false, $sheetTitle is used only as the sheet tab name and is NOT written as
+ *                                the first row — pass the title as one of $metaLines instead, wherever it belongs
+ *                                in the header block (e.g. below an org name line).
  */
-function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows): void
+function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows, array $boldRowIndexes = [], bool $includeTitleRow = true): void
 {
     if (!class_exists('ZipArchive')) {
         http_response_code(500);
@@ -45,6 +49,7 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' .
         '<Default Extension="xml" ContentType="application/xml"/>' .
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' .
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' .
         '</Types>'
     );
@@ -60,7 +65,24 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' .
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' .
         '</Relationships>'
+    );
+
+    // Minimal style sheet: cellXfs index 0 is the default (unstyled) font,
+    // index 1 is bold — used for subtotal/grand-total rows via $boldRowIndexes.
+    $zip->addFromString('xl/styles.xml',
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
+        '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><sz val="11"/><name val="Calibri"/><b/></font></fonts>' .
+        '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' .
+        '<borders count="1"><border/></borders>' .
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' .
+        '<cellXfs count="2">' .
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' .
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' .
+        '</cellXfs>' .
+        '</styleSheet>'
     );
 
     $safeSheetName = substr(preg_replace('/[\[\]:*?\/\\\\]/', ' ', $sheetTitle) ?: 'Report', 0, 31);
@@ -72,10 +94,12 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
         '</workbook>'
     );
 
-    // ---- Build sheet rows: title, meta lines, blank row, header row, data rows ----
+    // ---- Build sheet rows: [title,] meta lines, blank row, header row, data rows ----
     $colCount = max(count($headers), 1);
     $sheetRows = [];
-    $sheetRows[] = [$sheetTitle];
+    if ($includeTitleRow) {
+        $sheetRows[] = [$sheetTitle];
+    }
     foreach ($metaLines as $line) {
         $sheetRows[] = [$line];
     }
@@ -93,13 +117,19 @@ function stream_xlsx(string $filename, string $sheetTitle, array $metaLines, arr
     }
     $xml .= '</cols><sheetData>';
 
+    // Bold rows are given as indexes into $rows (the data section); offset
+    // them by however many title/meta/blank/header rows precede the data.
+    $dataStartIndex = ($includeTitleRow ? 1 : 0) + count($metaLines) + 2;
+    $boldSheetRowIndexes = array_flip(array_map(fn($i) => $i + $dataStartIndex, $boldRowIndexes));
+
     foreach ($sheetRows as $rowIndex => $row) {
         $r = $rowIndex + 1;
+        $styleAttr = isset($boldSheetRowIndexes[$rowIndex]) ? ' s="1"' : '';
         $xml .= '<row r="' . $r . '">';
         foreach ($row as $colIndex => $value) {
             $cellRef = xlsx_col_letter($colIndex + 1) . $r;
             $text = $value === null ? '' : (string)$value;
-            $xml .= '<c r="' . $cellRef . '" t="inlineStr"><is><t xml:space="preserve">' . xlsx_escape(xlsx_neutralize_formula($text)) . '</t></is></c>';
+            $xml .= '<c r="' . $cellRef . '"' . $styleAttr . ' t="inlineStr"><is><t xml:space="preserve">' . xlsx_escape(xlsx_neutralize_formula($text)) . '</t></is></c>';
         }
         $xml .= '</row>';
     }

@@ -245,6 +245,28 @@ function audit_log(PDO $pdo, ?int $userId, string $action, string $table, ?int $
 }
 
 /**
+ * Deletes care_jf_audit_logs rows older than 1 year, so the table
+ * doesn't grow unbounded. Exempts every 'DATABASE_RESET' row (Account
+ * Settings' "Reset Records" truncates this table and immediately
+ * writes exactly one such entry — see reset_application_records() in
+ * includes/db_admin.php — so at most one exists at a time) from
+ * age-based deletion, so an Administrator can always see when the
+ * system was last reset no matter how long ago, even past the normal
+ * 1-year retention window. This app has no cron/scheduled-task runner,
+ * so it's called opportunistically from public/audit-logs.php on each
+ * page view rather than on a schedule. Returns the number of rows
+ * deleted.
+ */
+function purge_old_audit_logs(PDO $pdo): int
+{
+    $stmt = $pdo->prepare(
+        "DELETE FROM care_jf_audit_logs WHERE created_at < (NOW() - INTERVAL 1 YEAR) AND action <> 'DATABASE_RESET'"
+    );
+    $stmt->execute();
+    return $stmt->rowCount();
+}
+
+/**
  * Auto-closes every OTHER agency's still-open "For Review" tag on an
  * applicant once a real hire is recorded — regardless of which path
  * created it (Tag for Review's confirm_hired, the internal Employment
@@ -542,6 +564,31 @@ function agency_name_taken(PDO $pdo, string $agencyName, ?int $excludeId = null)
     return (int)$stmt->fetchColumn() > 0;
 }
 
+/**
+ * Canonical status-badge color classes, shared across every table's
+ * simple Active/Disabled/Pending-style status pill so the same meaning
+ * always renders the same color app-wide (before this, each page had
+ * its own slightly different green/gray shade picked independently).
+ * Pass the semantic MEANING of the status, not the literal status
+ * string — e.g. 'Active' -> 'success', 'Pending' -> 'warning',
+ * 'Disabled'/'Withdrawn' -> 'neutral'. Categorical (non-binary) badges
+ * that distinguish several distinct values from each other — employment
+ * classification (Job Order/COS/Temporary/...), Job Vacancy status
+ * (Active/Filled/Closed) — intentionally keep their own multi-color
+ * mapping instead of collapsing onto this 4-tone scale, since they're
+ * telling values apart rather than signaling good/bad/waiting.
+ */
+function badge_class(string $tone): string
+{
+    return match ($tone) {
+        'success' => 'bg-green-100 text-green-800',
+        'warning' => 'bg-amber-100 text-amber-800',
+        'info'    => 'bg-blue-100 text-blue-800',
+        'danger'  => 'bg-red-100 text-red-700',
+        default   => 'bg-gray-100 text-gray-600', // 'neutral'
+    };
+}
+
 /** Paginate: returns [limit, offset, page] from $_GET, sanitized. */
 function paginate_params(): array
 {
@@ -554,4 +601,162 @@ function paginate_params(): array
     $offset = ($page - 1) * $limit;
 
     return [$limit, $offset, $page];
+}
+
+/**
+ * Shared WHERE builder for the Registered Applicants list query — used
+ * by both api/applicants.php (paginated JSON for the live table) and
+ * api/applicants-export.php (.xlsx export of the full filtered set), so
+ * the two can never drift out of sync with each other. $filters keys
+ * (all optional, already clean()ed by the caller): search, sex,
+ * civil_status, service, service_availed, date_from, date_to. Enforces
+ * the same Partner Agency restriction as before (an applicant hired by
+ * a DIFFERENT agency is excluded) — the query this feeds must alias the
+ * applicants table "a" and LEFT JOIN care_jf_employment_records as "er"
+ * (er.applicant_id = a.id AND er.is_current = 1 AND er.status = 'Active')
+ * so :my_agency_id resolves correctly (that join is also still needed
+ * for the table/export's own Employment Status *column*, which is
+ * display-only now — there is no Employment Status filter). Returns
+ * ['where' => sql, 'params' => bind params].
+ */
+function build_applicant_filters(PDO $pdo, array $filters): array
+{
+    $where = ['a.is_deleted = 0'];
+    $params = [];
+
+    $search = $filters['search'] ?? '';
+    if ($search !== '') {
+        $where[] = "(a.applicant_code LIKE :search1 OR a.contact_number LIKE :search2
+                     OR CONCAT(a.last_name,' ',a.first_name,' ',IFNULL(a.middle_name,'')) LIKE :search3)";
+        $params[':search1'] = '%' . $search . '%';
+        $params[':search2'] = '%' . $search . '%';
+        $params[':search3'] = '%' . $search . '%';
+    }
+    $sex = $filters['sex'] ?? '';
+    if ($sex !== '' && $sex !== 'All') {
+        $where[] = 'a.sex = :sex';
+        $params[':sex'] = $sex;
+    }
+    $civilStatus = $filters['civil_status'] ?? '';
+    if ($civilStatus !== '' && $civilStatus !== 'All') {
+        $where[] = 'a.civil_status = :civil_status';
+        $params[':civil_status'] = $civilStatus;
+    }
+    $dateFrom = $filters['date_from'] ?? '';
+    if ($dateFrom !== '') {
+        $where[] = 'DATE(a.created_at) >= :date_from';
+        $params[':date_from'] = $dateFrom;
+    }
+    $dateTo = $filters['date_to'] ?? '';
+    if ($dateTo !== '') {
+        $where[] = 'DATE(a.created_at) <= :date_to';
+        $params[':date_to'] = $dateTo;
+    }
+    $myAgencyId = is_partner_agency() ? current_agency_id($pdo) : null;
+    if ($myAgencyId !== null) {
+        // Once hired, an applicant disappears from every OTHER agency's
+        // pool — but the hiring agency keeps seeing their own hire.
+        // Not hired at all (er.id IS NULL) is always visible; hired by
+        // this same agency is always visible; hired by anyone else is
+        // excluded.
+        $where[] = '(er.id IS NULL OR er.agency_id = :my_agency_id)';
+        $params[':my_agency_id'] = $myAgencyId;
+    }
+    $service = $filters['service'] ?? '';
+    if ($service === 'job_seeker') {
+        $where[] = 'a.service_job_seeker = 1';
+    } elseif ($service === 'agency_services') {
+        $where[] = 'a.service_agency_services = 1';
+    }
+    // The Service Availed filter (distinct from $service above, which is
+    // clients.php's own page-scoping param): a three-way, mutually
+    // exclusive split of the same service_job_seeker / service_agency_services
+    // registration flags on care_jf_applicants.
+    $serviceAvailed = $filters['service_availed'] ?? '';
+    if ($serviceAvailed === 'job_seeker') {
+        $where[] = 'a.service_job_seeker = 1 AND a.service_agency_services = 0';
+    } elseif ($serviceAvailed === 'agency_services') {
+        $where[] = 'a.service_job_seeker = 0 AND a.service_agency_services = 1';
+    } elseif ($serviceAvailed === 'both') {
+        $where[] = 'a.service_job_seeker = 1 AND a.service_agency_services = 1';
+    }
+
+    return ['where' => implode(' AND ', $where), 'params' => $params];
+}
+
+/** Map one raw Applicant+current-employment SQL row (see
+ * build_applicant_filters()'s expected joins) into the shape the
+ * Applicant list's table and .xlsx export both use. */
+function map_applicant_row(array $row): array
+{
+    $status = $row['current_status'] ?: 'For Further Review';
+    $services = [];
+    if ($row['service_job_seeker']) $services[] = 'Job Seeker';
+    if ($row['service_agency_services']) $services[] = 'Avail Agency Services';
+    return [
+        'id'                => (int)$row['id'],
+        'applicant_code'    => $row['applicant_code'],
+        'full_name'         => full_name($row),
+        'sex'               => $row['sex'],
+        'date_of_birth'     => format_date($row['date_of_birth']),
+        'contact_number'    => $row['contact_number'],
+        'address'           => $row['address'],
+        'civil_status'      => $row['civil_status'],
+        'employment_status' => $status,
+        'services_availed'  => $services,
+        'date_registered'   => format_date($row['created_at']),
+    ];
+}
+
+/**
+ * Shared WHERE builder for a Partner Agency's own Clients list query —
+ * used by both api/agency-clients.php (paginated JSON) and
+ * api/agency-clients-export.php (.xlsx export of the full filtered set).
+ * Always scoped to $agencyId (pass current_agency_id()'s result — never
+ * a caller-supplied id) via care_jf_service_availments, so an agency can
+ * never see another agency's clients. $filters keys: search,
+ * service_availed ('agency_services' | 'both' | '' for no extra
+ * narrowing — 'job_seeker' isn't offered here since every row already
+ * has an agency-services availment record). Returns ['where' => sql,
+ * 'params' => bind params].
+ */
+function build_agency_client_filters(int $agencyId, array $filters): array
+{
+    $where = ['sa.agency_id = :agid'];
+    $params = [':agid' => $agencyId];
+
+    $search = $filters['search'] ?? '';
+    if ($search !== '') {
+        $where[] = "(a.applicant_code LIKE :search1 OR CONCAT(a.last_name,' ',a.first_name,' ',IFNULL(a.middle_name,'')) LIKE :search2)";
+        $params[':search1'] = '%' . $search . '%';
+        $params[':search2'] = '%' . $search . '%';
+    }
+    $serviceAvailed = $filters['service_availed'] ?? '';
+    if ($serviceAvailed === 'agency_services') {
+        $where[] = 'a.service_job_seeker = 0 AND a.service_agency_services = 1';
+    } elseif ($serviceAvailed === 'both') {
+        $where[] = 'a.service_job_seeker = 1 AND a.service_agency_services = 1';
+    }
+
+    return ['where' => implode(' AND ', $where), 'params' => $params];
+}
+
+/** Map one raw Partner-Agency-Clients SQL row (see
+ * build_agency_client_filters()'s expected joins) into the shape the
+ * Clients list's table and .xlsx export both use. */
+function map_agency_client_row(array $row): array
+{
+    $services = [];
+    if ($row['service_job_seeker']) $services[] = 'Job Seeker';
+    if ($row['service_agency_services']) $services[] = 'Avail Agency Services';
+    return [
+        'id'                  => (int)$row['id'],
+        'applicant_code'      => $row['applicant_code'],
+        'full_name'           => full_name($row),
+        'sex'                 => $row['sex'],
+        'services_registered' => $services,
+        'service_availed'     => $row['service_availed'] ?: '—',
+        'status'              => $row['availment_status'] === 'Active' ? 'AVAILING SERVICES' : 'WITHDRAWN',
+        'date_availed'        => format_date($row['date_availed']),
+    ];
 }

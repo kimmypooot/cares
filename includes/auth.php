@@ -6,14 +6,48 @@
 
 declare(strict_types=1);
 
+// --- Environment detection ---
+// A XAMPP/local dev box is always reached as localhost/127.0.0.1; a real
+// deployment is reached by its own hostname or a routable IP. Used below
+// to keep production-only hardening (error display, cookie Secure flag)
+// from ever breaking the existing local HTTP dev workflow.
+$isLocalDev = in_array($_SERVER['SERVER_NAME'] ?? '', ['localhost', '127.0.0.1', '::1'], true)
+    || in_array($_SERVER['SERVER_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443;
+
 // --- Secure session configuration (must run before session_start) ---
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.cookie_httponly', '1');
     ini_set('session.cookie_samesite', 'Lax');
-    // Uncomment when serving over HTTPS in production:
-    // ini_set('session.cookie_secure', '1');
+    // Environment-aware rather than a hardcoded toggle: enabling Secure
+    // unconditionally would silently break every session (login included)
+    // the moment this app is opened over plain http:// — e.g. this exact
+    // local XAMPP setup — since a Secure cookie is never sent back by the
+    // browser over a non-HTTPS connection.
+    if ($isHttps) {
+        ini_set('session.cookie_secure', '1');
+    }
     session_start();
+}
+
+// --- Production-only error hardening ---
+// Never let a normal visitor see a raw PHP warning/fatal-error/stack
+// trace (file paths, SQL, etc.) once this app is actually deployed;
+// local development keeps PHP's own (XAMPP php.ini) display_errors
+// setting untouched, so nothing changes for day-to-day work on this box.
+if (!$isLocalDev) {
+    ini_set('display_errors', '0');
+    ini_set('display_startup_errors', '0');
+    ini_set('log_errors', '1');
+    set_exception_handler(function (Throwable $e): void {
+        error_log('Uncaught exception: ' . $e);
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
+        echo 'An unexpected error occurred. Please try again or contact the system administrator.';
+    });
 }
 
 require_once __DIR__ . '/functions.php';
@@ -151,6 +185,12 @@ function can_manage_users(): bool
 }
 
 function can_view_audit_logs(): bool
+{
+    return current_user()['role'] === 'Administrator';
+}
+
+/** Full-database backup/reset (Account Settings' Database Management card). Administrator only. */
+function can_manage_database(): bool
 {
     return current_user()['role'] === 'Administrator';
 }

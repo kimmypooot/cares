@@ -291,30 +291,30 @@ require_once __DIR__ . '/../includes/sidebar.php';
   </div>
 
   <div x-show="tab === 'partner-agencies'" x-cloak class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-    <div class="overflow-x-auto">
-    <table class="min-w-full text-sm responsive-cards">
-      <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+    <div class="w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[65vh]">
+    <table class="min-w-max w-full text-sm">
+      <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
         <tr>
-          <th class="px-4 py-2.5 text-left">Agency Name</th>
-          <th class="px-4 py-2.5 text-left">Full Name</th>
-          <th class="px-4 py-2.5 text-left">Employer ID</th>
-          <th class="px-4 py-2.5 text-left">Contact Person</th>
-          <th class="px-4 py-2.5 text-left">Contact No</th>
-          <th class="px-4 py-2.5 text-left">Email</th>
-          <th class="px-4 py-2.5 text-left">Username</th>
-          <th class="px-4 py-2.5 text-left">Registered</th>
-          <th class="px-4 py-2.5 text-left">Account Status</th>
-          <th class="px-4 py-2.5 text-right">Actions</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Agency Name</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Full Name</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Employer ID</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Contact Person</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Contact No</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Email</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Username</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Registered</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Account Status</th>
+          <th class="px-4 py-2.5 text-right whitespace-nowrap min-w-[140px]">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-slate-100 bg-white">
         <?php if (!$agencyAccounts): ?>
           <tr><td colspan="10" class="px-4 py-10 text-center text-slate-400"><i class="fa-solid fa-building text-2xl mb-2 block"></i> No Partner Agency registrations yet.</td></tr>
         <?php endif; ?>
         <?php foreach ($agencyAccounts as $a):
-          $statusColors = ['Pending' => 'bg-amber-100 text-amber-800', 'Active' => 'bg-green-100 text-green-700', 'Disabled' => 'bg-gray-100 text-gray-600'];
+          $statusColors = ['Pending' => badge_class('warning'), 'Active' => badge_class('success'), 'Disabled' => badge_class('neutral')];
         ?>
-        <tr>
+        <tr class="hover:bg-slate-50">
           <td class="px-4 py-2.5 font-medium" data-label="Agency"><?= e($a['agency_name']) ?></td>
           <td class="px-4 py-2.5" data-label="Full Name">
             <?= e($a['full_name']) ?>
@@ -332,7 +332,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
               <span class="block text-[10px] text-red-500 mt-0.5">Agency record disabled</span>
             <?php endif; ?>
           </td>
-          <td class="px-4 py-2.5 text-right" data-label="Actions">
+          <td class="px-4 py-2.5 text-right whitespace-nowrap min-w-[140px]" data-label="Actions">
             <?php if ($a['account_status'] === 'Pending'): ?>
               <form method="POST" class="inline">
                 <?= csrf_field() ?>
@@ -434,31 +434,31 @@ require_once __DIR__ . '/../includes/sidebar.php';
   </div>
 
   <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-    <div class="overflow-x-auto">
-    <table class="min-w-full text-sm responsive-cards">
-      <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+    <div class="w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[65vh]">
+    <table class="min-w-max w-full text-sm">
+      <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
         <tr>
-          <th class="px-4 py-2.5 text-left">Full Name</th>
-          <th class="px-4 py-2.5 text-left">Username</th>
-          <th class="px-4 py-2.5 text-left">Role</th>
-          <th class="px-4 py-2.5 text-left">Status</th>
-          <th class="px-4 py-2.5 text-left">Created</th>
-          <th class="px-4 py-2.5 text-right">Actions</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Full Name</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Username</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Role</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Status</th>
+          <th class="px-4 py-2.5 text-left whitespace-nowrap">Created</th>
+          <th class="px-4 py-2.5 text-right whitespace-nowrap min-w-[110px]">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-slate-100 bg-white">
         <?php foreach ($users as $u): $isSelf = (int)$u['id'] === $currentUserId; ?>
-        <tr>
+        <tr class="hover:bg-slate-50">
           <td class="px-4 py-2.5 font-medium" data-label="Name"><?= e($u['full_name']) ?><?= $isSelf ? ' <span class="text-xs text-slate-400">(you)</span>' : '' ?></td>
           <td class="px-4 py-2.5" data-label="Username"><?= e($u['username']) ?></td>
           <td class="px-4 py-2.5" data-label="Role"><?= e($u['role']) ?></td>
           <td class="px-4 py-2.5" data-label="Status">
-            <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $u['status'] === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' ?>">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $u['status'] === 'Active' ? badge_class('success') : badge_class('neutral') ?>">
               <?= e($u['status']) ?>
             </span>
           </td>
           <td class="px-4 py-2.5 text-slate-500" data-label="Created"><?= format_date($u['created_at']) ?></td>
-          <td class="px-4 py-2.5 text-right" data-label="Actions">
+          <td class="px-4 py-2.5 text-right whitespace-nowrap min-w-[110px]" data-label="Actions">
             <button @click="editingId = editingId === <?= (int)$u['id'] ?> ? null : <?= (int)$u['id'] ?>" class="text-slate-500 hover:text-amber-600 px-1" title="Edit"><i class="fa-solid fa-pen"></i></button>
             <button @click="resettingId = resettingId === <?= (int)$u['id'] ?> ? null : <?= (int)$u['id'] ?>" class="text-slate-500 hover:text-purple-600 px-1" title="Reset Password"><i class="fa-solid fa-key"></i></button>
             <?php if (!$isSelf): ?>

@@ -49,14 +49,14 @@ if (is_partner_agency()) {
           ['label' => 'Hired by This Agency',           'value' => $hiredByAgencyCount,  'icon' => 'fa-briefcase',      'color' => 'text-green-600 bg-green-50'],
       ];
       foreach ($paCards as $c): ?>
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
-        <div class="w-11 h-11 rounded-lg flex items-center justify-center <?= $c['color'] ?>">
-          <i class="fa-solid <?= $c['icon'] ?>"></i>
-        </div>
-        <div>
+      <div class="bg-white rounded-xl shadow-md border border-slate-300 p-4 flex items-center justify-between gap-3 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-brand-200">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-11 h-11 shrink-0 rounded-lg flex items-center justify-center <?= $c['color'] ?>">
+            <i class="fa-solid <?= $c['icon'] ?>"></i>
+          </div>
           <p class="text-xs text-slate-500 font-medium"><?= e($c['label']) ?></p>
-          <p class="text-xl font-bold text-slate-800"><?= number_format($c['value']) ?></p>
         </div>
+        <p class="text-xl font-bold text-slate-800"><?= number_format($c['value']) ?></p>
       </div>
       <?php endforeach; ?>
     </div>
@@ -173,14 +173,14 @@ require_once __DIR__ . '/../includes/sidebar.php';
       ['label' => 'COS',              'value' => $statusCounts['COS'], 'icon' => 'fa-file-contract', 'color' => 'text-indigo-700 bg-indigo-50'],
   ];
   foreach ($cards as $c): ?>
-  <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
-    <div class="w-11 h-11 rounded-lg flex items-center justify-center <?= $c['color'] ?>">
-      <i class="fa-solid <?= $c['icon'] ?>"></i>
-    </div>
-    <div>
+  <div class="bg-white rounded-xl shadow-md border border-slate-300 p-4 flex items-center justify-between gap-3 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-brand-200">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-11 h-11 shrink-0 rounded-lg flex items-center justify-center <?= $c['color'] ?>">
+        <i class="fa-solid <?= $c['icon'] ?>"></i>
+      </div>
       <p class="text-xs text-slate-500 font-medium"><?= e($c['label']) ?></p>
-      <p class="text-xl font-bold text-slate-800"><?= number_format($c['value']) ?></p>
     </div>
+    <p class="text-xl font-bold text-slate-800"><?= number_format($c['value']) ?></p>
   </div>
   <?php endforeach; ?>
 </div>
@@ -207,6 +207,7 @@ require_once __DIR__ . '/../includes/sidebar.php';
 
 <script>
 const palette = ['#3b63f5','#22c55e','#eab308','#a855f7','#ef4444','#0ea5e9','#f97316','#10b981'];
+applyChartDefaults();
 
 // Applicant Status: Hired vs Not Hired — pulled live from the database, not hard-coded.
 new Chart(document.getElementById('chartApplicantStatus'), {

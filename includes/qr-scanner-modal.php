@@ -11,6 +11,13 @@
  * looked-up applicant with their own agency — instantly on a camera
  * decode, behind a confirm dialog on manual code entry. See
  * docs/superpowers/specs/2026-09-10-qr-auto-tagging-design.md.
+ *
+ * The trigger button's label defaults to "Scan / Look Up Applicant";
+ * a caller can set $qrButtonLabel before requiring this partial to use
+ * different wording (e.g. applicants.php uses "Scan QR Code") without
+ * duplicating the modal/JS. Reset after use so it never bleeds into a
+ * later require of this same partial on a page that includes it twice
+ * (dashboard.php, clients.php) without setting an override of its own.
  */
 
 // Not every including page defines $pdo in its own scope before this
@@ -20,10 +27,13 @@
 // partial) pulls in functions.php, which requires config/database.php,
 // so the Database class is always already loaded here.
 $pdo = $pdo ?? Database::getConnection();
+$qrButtonLabel = $qrButtonLabel ?? 'Scan / Look Up Applicant';
+$qrButtonLabelForThisInclude = $qrButtonLabel;
+unset($qrButtonLabel);
 ?>
 <div x-data="qrScanner({ isPartnerAgency: <?= is_partner_agency() ? 'true' : 'false' ?> })">
   <button type="button" @click="openModal()" class="inline-flex items-center gap-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg">
-    <i class="fa-solid fa-qrcode"></i> Scan / Look Up Applicant
+    <i class="fa-solid fa-qrcode"></i> <?= e($qrButtonLabelForThisInclude) ?>
   </button>
 
   <div x-show="open" x-cloak x-transition.opacity

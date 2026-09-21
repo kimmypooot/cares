@@ -3,6 +3,43 @@
  * Shared front-end behavior: confirm dialogs, toast helper, debounce util.
  */
 
+/**
+ * Light/Dark theme toggle. The initial theme is applied synchronously
+ * in <head> (see includes/theme-init.php) to avoid a flash; this just
+ * handles the user flipping it afterwards. Persists to localStorage
+ * (no server round-trip, no DB column — see CLAUDE.md's "no database
+ * changes" note for this feature) and fires a 'theme-changed' event so
+ * anything that can't react to the `dark` class alone (Chart.js
+ * instances, which bake their colors in at creation time) can update.
+ */
+function toggleAppTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('care-theme', isDark ? 'dark' : 'light'); } catch (e) {}
+  document.dispatchEvent(new CustomEvent('theme-changed', { detail: { dark: isDark } }));
+  return isDark;
+}
+
+// Re-color any already-rendered Chart.js instances (dashboard.php) when
+// the theme flips — Chart.defaults (set via applyChartDefaults() in
+// includes/theme-init.php, before each chart was created) only affects
+// charts created *after* the change, not ones already on screen.
+document.addEventListener('theme-changed', () => {
+  if (typeof Chart === 'undefined' || typeof chartThemeColors !== 'function') return;
+  applyChartDefaults();
+  const colors = chartThemeColors();
+  Object.values(Chart.instances || {}).forEach((chart) => {
+    chart.options.color = colors.text;
+    Object.values(chart.options.scales || {}).forEach((scale) => {
+      if (scale.ticks) scale.ticks.color = colors.text;
+      if (scale.grid) scale.grid.color = colors.grid;
+    });
+    if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
+      chart.options.plugins.legend.labels.color = colors.text;
+    }
+    chart.update();
+  });
+});
+
 function debounce(fn, delay = 350) {
   let timer;
   return (...args) => {
